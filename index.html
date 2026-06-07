@@ -1,0 +1,1619 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>工場進捗管理【現場用】</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:#0b0f1a; --card:#111827; --card2:#161d2e; --border:#1e2d45;
+  --text:#e2e8f0; --muted:#64748b; --faint:#1a2535;
+  --g:#22c55e; --r:#ef4444; --y:#f59e0b; --b:#3b82f6; --t:#06b6d4; --r2:#dc2626;
+}
+html,body { background:var(--bg); color:var(--text); font-family:'Noto Sans JP','Hiragino Sans','Yu Gothic',sans-serif; min-height:100%; font-size:14px; }
+button { cursor:pointer; font-family:inherit; transition:opacity .15s,transform .1s; }
+button:hover { opacity:.8; } button:active { transform:scale(.96); }
+input,textarea,select { font-family:inherit; }
+input[type=number] { -moz-appearance:textfield; }
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance:none; }
+::-webkit-scrollbar { width:4px; height:4px; }
+::-webkit-scrollbar-thumb { background:#2a3a52; border-radius:2px; }
+
+/* ナビ */
+#nav { display:flex; gap:2px; background:#070b13; padding:6px 8px 0; overflow-x:auto; border-bottom:1px solid var(--border); position:sticky; top:0; z-index:100; }
+#nav::-webkit-scrollbar { height:3px; }
+.tab-btn { background:none; border:none; color:var(--muted); padding:8px 12px; font-size:12px; border-radius:6px 6px 0 0; white-space:nowrap; border-bottom:2px solid transparent; flex-shrink:0; }
+.tab-btn.active { color:var(--t); border-bottom-color:var(--t); background:var(--faint); }
+
+/* パネル */
+.panel { display:none; padding:12px; }
+.panel.active { display:block; }
+
+/* カード */
+.card { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:12px; margin-bottom:10px; }
+.card-title { font-size:12px; color:var(--muted); margin-bottom:10px; font-weight:700; letter-spacing:.05em; }
+
+/* ボタン */
+.btn-primary { background:var(--b); color:#fff; border:none; padding:9px 20px; border-radius:6px; font-size:13px; font-weight:700; }
+.btn-teal    { background:var(--t); color:#000; border:none; padding:9px; border-radius:6px; font-size:13px; font-weight:700; width:100%; }
+.btn-sub     { background:#1e3a5f; color:var(--t); border:1px solid var(--b); padding:7px 16px; border-radius:6px; font-size:12px; font-weight:700; }
+.btn-green   { background:#14532d; color:var(--g); border:1px solid var(--g); padding:7px 16px; border-radius:6px; font-size:12px; font-weight:700; }
+.btn-danger  { background:var(--r2); color:#fff; border:none; padding:7px 16px; border-radius:6px; font-size:12px; font-weight:700; }
+.btn-del     { background:none; border:1px solid var(--border); color:var(--muted); padding:4px 10px; border-radius:4px; font-size:11px; white-space:nowrap; }
+.btn-del:hover { border-color:var(--r); color:var(--r); }
+.btn-star    { background:none; border:none; font-size:18px; padding:2px 6px; border-radius:4px; cursor:pointer; line-height:1; }
+.btn-star:hover { background:var(--faint); }
+.status-msg { font-size:12px; margin-top:8px; min-height:18px; }
+
+/* ①進捗 */
+#alert-bar { padding:12px 14px; border-radius:10px; font-size:24px; font-weight:900; text-align:center; margin-bottom:10px; line-height:1.4; letter-spacing:.02em; }
+#alert-bar.surplus  { background:#052e16; color:var(--g); border:2px solid var(--g); }
+#alert-bar.shortage { background:#2d0a0a; color:var(--r); border:2px solid var(--r); animation:blink .9s step-end infinite; }
+#alert-bar.neutral  { background:var(--faint); color:var(--muted); border:2px solid var(--border); font-size:14px; font-weight:400; letter-spacing:0; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.45} }
+#overall-bar-wrap { margin-bottom:10px; }
+#overall-bar-label { font-size:12px; color:var(--muted); display:flex; justify-content:space-between; margin-bottom:4px; }
+#overall-bar-bg { background:var(--faint); border-radius:4px; height:10px; overflow:hidden; }
+#overall-bar-fill { height:100%; background:linear-gradient(90deg,var(--t),var(--b)); border-radius:4px; transition:width .4s ease; }
+
+.task-card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:11px 13px; margin-bottom:8px; }
+.task-card.priority { background:#120e00; border-color:#78350f; box-shadow:0 0 0 1px #78350f30; }
+.task-card.done-card { opacity:.5; }
+.task-top { display:flex; align-items:flex-start; gap:8px; margin-bottom:9px; }
+.star-btn { background:none; border:none; font-size:18px; padding:0; line-height:1; cursor:pointer; flex-shrink:0; margin-top:1px; }
+.task-name-wrap { flex:1; min-width:0; }
+.task-name  { font-size:14px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.task-color { font-size:11px; color:var(--muted); margin-top:1px; }
+.deadline-badge { font-size:11px; padding:3px 7px; border-radius:5px; font-weight:700; white-space:nowrap; flex-shrink:0; align-self:flex-start; }
+.deadline-badge.urgent { background:#3b0101; color:var(--r); border:1px solid var(--r); }
+.deadline-badge.near   { background:#2d1a00; color:var(--y); border:1px solid var(--y); }
+.deadline-badge.ok     { background:#021b10; color:var(--g); border:1px solid var(--g); }
+.deadline-badge.done   { background:#1e2d45; color:var(--muted); border:1px solid var(--border); }
+.process-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:7px; }
+.proc-box { background:var(--faint); border-radius:7px; padding:9px 8px; }
+.proc-label { font-size:10px; color:var(--muted); margin-bottom:5px; font-weight:700; letter-spacing:.05em; }
+.proc-input-row { display:flex; align-items:center; gap:4px; }
+.proc-btn { background:#1e3a5f; color:var(--t); border:1px solid #2a5080; width:28px; height:28px; border-radius:5px; font-size:17px; display:flex; align-items:center; justify-content:center; flex-shrink:0; padding:0; line-height:1; }
+.proc-val { background:var(--card); border:1px solid var(--border); color:var(--text); text-align:center; width:54px; height:28px; border-radius:5px; font-size:14px; font-weight:700; flex:1; min-width:0; }
+.proc-plan   { font-size:10px; color:var(--muted); margin-top:4px; }
+.proc-remain { font-size:11px; color:var(--t); margin-top:3px; font-weight:700; }
+.prog-bar-bg { background:#0d1620; border-radius:3px; height:5px; overflow:hidden; margin-top:5px; }
+.prog-bar-fill { height:100%; border-radius:3px; transition:width .3s ease; }
+.prog-bar-fill.pre  { background:var(--b); }
+.prog-bar-fill.post { background:var(--g); }
+.prog-bar-fill.over { background:var(--r)!important; }
+.task-meta { display:flex; align-items:center; gap:10px; font-size:11px; color:var(--muted); margin-top:4px; flex-wrap:wrap; }
+.task-meta strong { color:var(--t); }
+
+/* ②納品計画 */
+.plan-form { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:13px; margin-bottom:12px; }
+.form-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px; }
+.form-group { display:flex; flex-direction:column; gap:4px; }
+.form-group label { font-size:11px; color:var(--muted); font-weight:600; }
+.form-group input,
+.form-group select { background:var(--faint); border:1px solid var(--border); color:var(--text); padding:8px 9px; border-radius:6px; font-size:13px; width:100%; }
+.form-group input:focus,
+.form-group select:focus { outline:1px solid var(--t); }
+.priority-check-row { display:flex; align-items:center; gap:8px; background:var(--faint); border:1px solid var(--border); border-radius:6px; padding:9px 12px; margin-bottom:8px; cursor:pointer; user-select:none; }
+.priority-check-row input[type=checkbox] { width:16px; height:16px; accent-color:var(--y); cursor:pointer; flex-shrink:0; }
+.priority-check-row .pck-label { font-size:13px; font-weight:700; color:var(--y); }
+.priority-check-row .pck-desc  { font-size:11px; color:var(--muted); margin-left:auto; }
+.plan-item { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-bottom:7px; display:flex; align-items:center; gap:8px; }
+.plan-item.plan-priority { background:#120e00; border-color:#78350f; }
+.plan-item-info { flex:1; min-width:0; }
+.plan-item-name { font-size:13px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.plan-item-meta { font-size:11px; color:var(--muted); margin-top:3px; }
+.plan-item-qty  { font-size:13px; font-weight:700; color:var(--t); flex-shrink:0; margin-right:4px; }
+
+/* ⑤⑧ シフト・勤怠 */
+.shift-section-title { font-size:15px; font-weight:700; color:var(--t); margin-bottom:14px; padding-bottom:8px; border-bottom:1px solid var(--border); }
+.shift-date-label { font-size:13px; color:var(--muted); margin-bottom:12px; }
+.member-list { margin-bottom:10px; }
+.member-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; background:var(--faint); border:1px solid var(--border); border-radius:7px; padding:8px 10px; }
+.member-name-input  { flex:1; background:var(--card); border:1px solid var(--border); color:var(--text); padding:6px 8px; border-radius:5px; font-size:13px; min-width:0; }
+.member-name-input:focus  { outline:1px solid var(--t); }
+.member-hours-input { background:var(--card); border:1px solid var(--border); color:var(--text); padding:6px; border-radius:5px; font-size:14px; font-weight:700; text-align:center; width:68px; flex-shrink:0; }
+.member-hours-input:focus { outline:1px solid var(--t); }
+.member-unit { font-size:12px; color:var(--muted); flex-shrink:0; }
+.shift-total-box { background:var(--faint); border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin:10px 0; display:flex; justify-content:space-between; align-items:center; }
+.shift-total-left { font-size:12px; color:var(--muted); }
+.shift-total-val { font-size:24px; font-weight:900; color:#fff; }
+.shift-total-sub { font-size:12px; color:var(--t); margin-top:2px; }
+
+/* ⑧勤怠: 週次カレンダー */
+.week-nav { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+.week-nav-label { font-size:14px; font-weight:700; color:var(--text); text-align:center; flex:1; }
+.week-nav-btn { background:var(--faint); border:1px solid var(--border); color:var(--text); padding:6px 14px; border-radius:6px; font-size:13px; }
+.week-days { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:12px; }
+.day-cell { background:var(--faint); border:1px solid var(--border); border-radius:7px; padding:6px 4px; text-align:center; cursor:pointer; transition:background .15s,border-color .15s; min-height:60px; display:flex; flex-direction:column; align-items:center; gap:3px; }
+.day-cell:hover { background:#1e2d45; }
+.day-cell.selected { border-color:var(--t); background:#0c2030; }
+.day-cell.today { border-color:var(--y); background:#1f1700; }
+.day-cell.has-data { position:relative; }
+.day-cell.has-data::after { content:'●'; position:absolute; top:3px; right:4px; font-size:7px; color:var(--g); }
+.day-cell.off { opacity:.35; cursor:default; }
+.day-label { font-size:10px; font-weight:700; }
+.day-label.sun { color:var(--r); }
+.day-label.sat { color:var(--b); }
+.day-num { font-size:16px; font-weight:900; }
+.day-hours { font-size:10px; color:var(--t); }
+.day-cell.selected .day-num { color:var(--t); }
+.day-edit-area { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:12px; margin-bottom:10px; }
+.day-edit-title { font-size:13px; font-weight:700; color:var(--t); margin-bottom:10px; }
+.day-edit-off-row { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+.day-edit-off-row label { font-size:13px; color:var(--muted); cursor:pointer; display:flex; align-items:center; gap:6px; }
+.day-edit-off-row input[type=checkbox] { width:16px; height:16px; accent-color:var(--r2); }
+
+/* ⑥品目 */
+.file-drop-zone { border:2px dashed var(--border); border-radius:8px; padding:20px 16px; text-align:center; cursor:pointer; transition:border-color .2s,background .2s; background:var(--faint); position:relative; }
+.file-drop-zone:hover,.file-drop-zone.dragover { border-color:var(--t); background:#0f1f2e; }
+.file-drop-zone input[type=file] { position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; }
+.file-drop-icon { font-size:32px; margin-bottom:8px; }
+.file-drop-text { font-size:13px; color:var(--muted); line-height:1.6; }
+.file-drop-text strong { color:var(--t); }
+.file-selected-name { font-size:12px; color:var(--g); margin-top:8px; font-weight:700; min-height:18px; }
+.items-scroll { max-height:none; overflow-y:visible; }
+.item-table { width:100%; border-collapse:collapse; font-size:12px; }
+.item-table th { background:var(--faint); color:var(--muted); padding:6px 8px; text-align:left; border-bottom:2px solid var(--border); font-weight:700; white-space:nowrap; }
+.item-table td { padding:5px 8px; border-bottom:1px solid var(--border); vertical-align:middle; }
+.item-table tbody tr:hover td { background:#141f30; }
+.item-table tbody tr:last-child td { border-bottom:none; }
+.acc-header { display:flex; align-items:center; justify-content:space-between; cursor:pointer; padding:8px 4px; border-bottom:1px solid var(--border); margin-bottom:2px; user-select:none; }
+.acc-header .acc-label { font-size:12px; font-weight:700; color:var(--muted); }
+.acc-arrow { font-size:11px; color:var(--muted); transition:transform .2s; }
+.acc-header.open .acc-arrow { transform:rotate(90deg); }
+.acc-body { display:none; }
+.acc-body.open { display:block; }
+
+/* ⚙️設定 */
+.setting-row { margin-bottom:14px; }
+.setting-row label { display:block; font-size:12px; color:var(--muted); margin-bottom:5px; }
+.setting-row input[type=text] { background:var(--card2); border:1px solid var(--border); color:var(--text); padding:9px 10px; border-radius:6px; width:100%; font-size:13px; }
+.setting-row input[type=text]:focus { outline:1px solid var(--t); }
+#conn-dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+#conn-dot.ok   { background:var(--g); box-shadow:0 0 6px var(--g); }
+#conn-dot.ng   { background:var(--r); }
+#conn-dot.wait { background:var(--y); animation:blink .6s step-end infinite; }
+</style>
+</head>
+<body>
+
+<nav id="nav">
+  <button class="tab-btn active" onclick="switchTab('progress',this)">📊 ①進捗</button>
+  <button class="tab-btn"        onclick="switchTab('plan',this)">📅 ②納品計画</button>
+  <button class="tab-btn"        onclick="switchTab('shift',this)">⏱️ ⑤シフト</button>
+  <button class="tab-btn"        onclick="switchTab('item',this)">📦 ⑥品目</button>
+  <button class="tab-btn"        onclick="switchTab('attendance',this)">🧑 ⑧勤怠</button>
+  <button class="tab-btn"        onclick="switchTab('settings',this)">⚙️ 設定</button>
+</nav>
+
+<!-- ①進捗 -->
+<div id="panel-progress" class="panel active">
+  <div id="alert-bar" class="neutral">データ読み込み中...</div>
+  <!-- 参照中の勤怠日インジケーター -->
+  <div id="progress-ref-date" style="font-size:11px;color:var(--muted);text-align:right;margin-bottom:4px;padding:0 2px;"></div>
+  <div id="overall-bar-wrap">
+    <div id="overall-bar-label">
+      <span>全体進捗（前後工程の合計達成率）</span>
+      <span id="overall-pct">0%</span>
+    </div>
+    <div id="overall-bar-bg"><div id="overall-bar-fill" style="width:0%"></div></div>
+  </div>
+  <div id="task-list"></div>
+</div>
+
+<!-- ②納品計画 -->
+<div id="panel-plan" class="panel">
+  <div class="plan-form">
+    <div class="form-grid">
+      <div class="form-group">
+        <label>📅 納期</label>
+        <input type="date" id="plan-date">
+      </div>
+      <div class="form-group">
+        <label>📦 品目</label>
+        <select id="plan-item"><option value="">-- 選択してください --</option></select>
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>🔢 予定数</label>
+        <input type="number" id="plan-qty" min="1" value="1">
+      </div>
+      <div class="form-group">
+        <label>📝 メモ（任意）</label>
+        <input type="text" id="plan-memo" placeholder="例: 急ぎ">
+      </div>
+    </div>
+    <label class="priority-check-row">
+      <input type="checkbox" id="plan-priority">
+      <span class="pck-label">⭐ 優先（先行）</span>
+      <span class="pck-desc">進捗タブの最上位に固定表示</span>
+    </label>
+    <button class="btn-teal" onclick="addPlan()">＋ 計画を追加</button>
+  </div>
+  <div id="plan-list"></div>
+</div>
+
+<!-- ⑤シフト（基本シフトテンプレート） -->
+<div id="panel-shift" class="panel">
+  <div class="card">
+    <div class="shift-section-title">⏱️ 基本シフト設定（テンプレート）</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.7;">
+      ここに登録したメンバーと稼働時間が「基本シフト」として保存されます。<br>
+      ⑧勤怠タブで各日に「基本シフト読込」ボタンを押すと反映されます。
+    </p>
+    <div class="member-list" id="shift-member-list">
+      <div id="shift-empty-msg" style="text-align:center;color:var(--muted);padding:16px;font-size:12px;">
+        メンバーを追加してください
+      </div>
+    </div>
+    <button class="btn-sub" onclick="addShiftMember()" style="width:100%;margin-bottom:10px;">＋ メンバーを追加</button>
+    <div class="shift-total-box">
+      <div>
+        <div class="shift-total-left">基本シフト 合計</div>
+        <div class="shift-total-sub" id="shift-total-sub">0 人</div>
+      </div>
+      <div class="shift-total-val" id="shift-total-val">0.0 時間</div>
+    </div>
+    <button class="btn-primary" onclick="saveBaseShift()" style="width:100%;">💾 基本シフトを保存</button>
+    <div class="status-msg" id="shift-status"></div>
+  </div>
+</div>
+
+<!-- ⑥品目 -->
+<div id="panel-item" class="panel">
+  <div class="card">
+    <div class="card-title">📥 品目マスター CSVファイルインポート</div>
+    <div class="file-drop-zone" id="file-drop-zone"
+         ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+      <input type="file" id="csv-file-input" accept=".csv,text/csv" onchange="onFileSelected(event)">
+      <div class="file-drop-icon">📂</div>
+      <div class="file-drop-text">
+        <strong>クリックしてCSVを選択</strong>、またはここにドラッグ＆ドロップ<br>
+        <span style="font-size:11px;">列順：品目名, カラー, 前工程時間(分), 後工程時間(分), シート品番, カット幅, カット長, グループ</span>
+      </div>
+      <div class="file-selected-name" id="file-selected-name">— ファイル未選択 —</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+      <button class="btn-sub" id="import-btn" onclick="importCSV()" disabled style="opacity:.4;cursor:not-allowed;">📤 インポート実行</button>
+      <button class="btn-danger" onclick="clearItems()">🗑️ 全件消去</button>
+    </div>
+    <div class="status-msg" id="csv-status"></div>
+  </div>
+  <div class="card">
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>品目一覧</span>
+      <span id="item-count" style="color:var(--t);font-size:14px;font-weight:900;"></span>
+    </div>
+    <div class="items-scroll" id="item-list"></div>
+  </div>
+</div>
+
+<!-- ⑧勤怠（週次カレンダー形式） -->
+<div id="panel-attendance" class="panel">
+  <div class="card">
+    <div class="shift-section-title">🧑 週次勤怠管理</div>
+
+    <!-- 週ナビゲーション -->
+    <div class="week-nav">
+      <button class="week-nav-btn" onclick="changeWeek(-1)">◀ 前週</button>
+      <div class="week-nav-label" id="week-nav-label">—</div>
+      <button class="week-nav-btn" onclick="changeWeek(1)">次週 ▶</button>
+    </div>
+
+    <!-- 7日分のカレンダーマス -->
+    <div class="week-days" id="week-days"></div>
+
+    <!-- 選択日の編集エリア -->
+    <div class="day-edit-area" id="day-edit-area">
+      <div class="day-edit-title" id="day-edit-title">日付を選択してください</div>
+
+      <!-- 休日チェック -->
+      <div class="day-edit-off-row">
+        <label>
+          <input type="checkbox" id="day-off-check" onchange="onDayOffToggle()">
+          この日は休業・全員休み
+        </label>
+      </div>
+
+      <!-- メンバー入力リスト -->
+      <div class="member-list" id="attend-member-list">
+        <div id="attend-empty-msg" style="text-align:center;color:var(--muted);padding:12px;font-size:12px;">
+          メンバーを追加するか、基本シフトから読み込んでください
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+        <button class="btn-green" onclick="loadBaseShiftToDay()" style="flex:1;">📋 基本シフト読込</button>
+        <button class="btn-sub" onclick="addAttendMember()" style="flex:1;">＋ メンバー追加</button>
+      </div>
+
+      <!-- 日別合計 -->
+      <div class="shift-total-box" style="margin-top:0;">
+        <div>
+          <div class="shift-total-left">この日の合計</div>
+          <div class="shift-total-sub" id="attend-total-sub">0 人</div>
+        </div>
+        <div class="shift-total-val" id="attend-total-val">0.0 時間</div>
+      </div>
+
+      <button class="btn-primary" onclick="saveDayAttendance()" style="width:100%;">💾 この日の勤怠を保存</button>
+      <div class="status-msg" id="attend-status"></div>
+    </div>
+
+    <!-- 週合計 -->
+    <div class="shift-total-box" style="margin-top:4px;">
+      <div>
+        <div class="shift-total-left">今週の合計稼働時間</div>
+        <div class="shift-total-sub" id="week-total-sub">— 日分</div>
+      </div>
+      <div class="shift-total-val" id="week-total-val">— 時間</div>
+    </div>
+  </div>
+</div>
+
+<!-- ⚙️設定 -->
+<div id="panel-settings" class="panel">
+  <div class="card">
+    <div class="card-title">🔗 GAS接続設定</div>
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;">
+      <span id="conn-dot" class="wait"></span>
+      <span id="conn-label" style="font-size:12px;color:var(--muted);">未接続</span>
+    </div>
+    <div class="setting-row">
+      <label>GAS ウェブアプリ URL</label>
+      <input type="text" id="gas-url-input" placeholder="https://script.google.com/macros/s/XXXX/exec">
+    </div>
+    <button class="btn-primary" onclick="saveGasUrl()">💾 保存して接続テスト</button>
+    <div class="status-msg" id="settings-status"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">ℹ️ アプリ情報</div>
+    <div style="font-size:12px;color:var(--muted);line-height:2;">
+      工場進捗管理アプリ【現場用】v4.2<br>
+      GASシート: itemMaster / plans / progress / shiftAttendance
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ============================================================
+// STATE
+// ============================================================
+const st = {
+  gasUrl:       '',
+  itemMaster:   [],
+  plans:        [],   // [{id,date,itemId,qty,memo,priority}]
+  progress:     {},   // {planId:{preDone,postDone}}
+  baseShift:    [],   // [{name,hours}]
+  weeklyAttend: {}    // {'YYYY-MM-DD': [{name,hours}] | 'off'}
+                      // 'off' = 休業日
+};
+
+let pendingCsvItems = [];
+
+// 勤怠タブ用の一時状態
+let attendState = {
+  selectedDate: '',      // 現在選択中の日付 'YYYY-MM-DD'
+  weekStart:    ''       // 表示週の月曜 'YYYY-MM-DD'
+};
+
+// ============================================================
+// Cloud 通信（CORS回避: Content-Type=text/plain）
+// ============================================================
+const Cloud = {
+  async get() {
+    if (!st.gasUrl) return null;
+    try {
+      const res = await fetch(`${st.gasUrl}?action=getAll&v=${Date.now()}`,
+        { method:'GET', redirect:'follow', cache:'no-store' });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch(e) { console.warn('[Cloud.get]',e); return null; }
+  },
+  async post(payload) {
+    if (!st.gasUrl) return null;
+    try {
+      const res = await fetch(`${st.gasUrl}?v=${Date.now()}`, {
+        method:'POST', redirect:'follow', cache:'no-store',
+        headers:{ 'Content-Type':'text/plain;charset=UTF-8' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch(e) { console.warn('[Cloud.post]',e); return null; }
+  },
+  saveItemMaster()      { return this.post({ action:'saveItemMaster', data:st.itemMaster }); },
+  savePlansProgress()   { return this.post({ action:'savePlansProgress', plans:st.plans, progress:st.progress }); },
+  saveShiftAttendance() {
+    // weeklyAttend から今日を含む attendDate/attendMembers を自動計算して送る
+    const today      = todayStr();
+    const todayData  = st.weeklyAttend[today];
+    const attMembers = (todayData && todayData !== 'off') ? todayData : [];
+    return this.post({
+      action:'saveShiftAttendance',
+      baseShift:     st.baseShift,
+      attendDate:    today,
+      attendMembers: attMembers,
+      weeklyAttend:  st.weeklyAttend
+    });
+  }
+};
+
+// ============================================================
+// 初期化
+// ============================================================
+window.addEventListener('load', async () => {
+  document.getElementById('plan-date').value = todayStr();
+
+  const savedUrl = localStorage.getItem('gasUrl');
+  if (savedUrl) st.gasUrl = savedUrl;
+
+  const savedState = localStorage.getItem('appState_v4');
+  if (savedState) {
+    try {
+      const ls = JSON.parse(savedState);
+      if (Array.isArray(ls.itemMaster) && ls.itemMaster.length > 0) st.itemMaster = ls.itemMaster;
+      if (Array.isArray(ls.plans))                                    st.plans      = ls.plans;
+      if (ls.progress && typeof ls.progress === 'object')            st.progress   = ls.progress;
+      if (Array.isArray(ls.baseShift))                                st.baseShift  = ls.baseShift;
+      if (ls.weeklyAttend && typeof ls.weeklyAttend === 'object')    st.weeklyAttend = ls.weeklyAttend;
+    } catch(e) { console.warn('localStorage復元失敗:', e); }
+  }
+
+  document.getElementById('gas-url-input').value = st.gasUrl;
+
+  // 勤怠タブ: 今週の月曜を初期表示週に
+  attendState.weekStart    = getMonday(todayStr());
+  attendState.selectedDate = todayStr();
+
+  // シフトDOMを初期構築
+  rebuildMemberDom('shift');
+  recalcShiftTotal();
+
+  renderProgress();
+  renderPlanList();
+  renderItemList();
+
+  if (st.gasUrl) await pullFromCloud();
+  setInterval(syncLoop, 30000);  // 30秒ポーリング（入力タイムアウト防止）
+});
+
+// ============================================================
+// クラウド同期
+// ============================================================
+/**
+ * メンバー入力フィールドにフォーカスが当たっているか判定する。
+ * フォーカス中はポーリングによるDOM再構築をスキップして
+ * 入力内容が消えないようにする。
+ */
+function isMemberInputFocused() {
+  const active = document.activeElement;
+  if (!active) return false;
+  return active.classList.contains('member-name-input') ||
+         active.classList.contains('member-hours-input');
+}
+
+async function syncLoop() {
+  if (!st.gasUrl) return;
+
+  // メンバー入力中はポーリングを完全スキップ
+  if (isMemberInputFocused()) return;
+
+  const json = await Cloud.get();
+  if (!json || !json.ok) return;
+
+  // データ取得後にも入力が始まっていたら state の上書きをしない
+  if (isMemberInputFocused()) return;
+
+  applyCloudData(json, false);  // ポーリング: シフト・勤怠は上書きしない
+  renderProgress();
+  renderPlanList();
+  renderItemList();
+
+  // 勤怠タブが開いていれば週カレンダーのみ更新
+  // renderDayEdit() はDOMを全書換えするため、フォーカス中は絶対に呼ばない
+  const attendPanel = document.getElementById('panel-attendance');
+  if (attendPanel && attendPanel.classList.contains('active')) {
+    renderWeekCalendar();
+    if (!isMemberInputFocused()) {
+      renderDayEdit();
+    }
+  }
+}
+
+async function pullFromCloud() {
+  setConn('wait','接続中...');
+  const json = await Cloud.get();
+  if (!json || !json.ok) { setConn('ng','接続失敗（URLを確認してください）'); return; }
+  applyCloudData(json, true);  // 初回ロード: シフト・勤怠も上書きOK
+  rebuildMemberDom('shift');
+  recalcShiftTotal();
+  setConn('ok','接続済み');
+  renderProgress();
+  renderPlanList();
+  renderItemList();
+  renderWeekCalendar();
+  renderDayEdit();
+}
+
+function applyCloudData(json, forceShiftAttend) {
+  // forceShiftAttend=true のとき（初回ロード時）だけ baseShift/weeklyAttend を上書きする。
+  // ポーリング時（syncLoop）は false で呼ばれるため、入力中のシフト・勤怠データを保護する。
+
+  if (Array.isArray(json.itemMaster) && json.itemMaster.length > 0) {
+    st.itemMaster = json.itemMaster.map(it => ({
+      id:String(it.id||''), name:String(it.name||''), color:String(it.color||''),
+      prePh:toNum(it.prePh), postPh:toNum(it.postPh),
+      sheetNo:String(it.sheetNo||''), cutW:String(it.cutW||''),
+      cutL:String(it.cutL||''), group:String(it.group||'その他')
+    }));
+  }
+  if (Array.isArray(json.plans)) {
+    st.plans = json.plans.map(p => ({
+      id:String(p.id||''),
+      date:sanitizeDateStr(p.date),
+      itemId:String(p.itemId||''),
+      qty:toNum(p.qty),
+      memo:String(p.memo||''),
+      priority:(p.priority===true||p.priority==='TRUE'||p.priority===1)
+    }));
+  }
+  if (json.progress && typeof json.progress === 'object') {
+    const prog = {};
+    Object.keys(json.progress).forEach(pid => {
+      const v = json.progress[pid];
+      prog[pid] = { preDone:toNum(v.preDone), postDone:toNum(v.postDone) };
+    });
+    st.progress = prog;
+  }
+  // シフト・勤怠データは初回ロード時のみ上書き（ポーリング時は保護）
+  if (forceShiftAttend) {
+    if (Array.isArray(json.baseShift)) {
+      st.baseShift = json.baseShift.map(m => ({ name:String(m.name||''), hours:toNum(m.hours) }));
+    }
+    if (json.weeklyAttend && typeof json.weeklyAttend === 'object') {
+      st.weeklyAttend = json.weeklyAttend;
+    }
+  }
+  saveLocal();
+}
+
+function saveLocal() {
+  try {
+    localStorage.setItem('appState_v4', JSON.stringify({
+      itemMaster:st.itemMaster, plans:st.plans, progress:st.progress,
+      baseShift:st.baseShift, weeklyAttend:st.weeklyAttend
+    }));
+  } catch(e) { console.warn('localStorage保存失敗:', e); }
+}
+
+// ============================================================
+// ①進捗タブ 描画
+// ============================================================
+function renderProgress() {
+  const today   = todayStr();
+  const tasks   = buildTaskList();
+
+  // ── 全タスクの工数集計（過去分含む全て）──────────────────
+  let totalPlanM = 0, totalDoneM = 0, totalRemainM = 0;
+  tasks.forEach(t => {
+    totalPlanM   += t.prePlanM   + t.postPlanM;
+    totalDoneM   += t.preActM    + t.postActM;
+    totalRemainM += t.preRemainM + t.postRemainM;
+  });
+
+  // ── 全体進捗バー ─────────────────────────────────────────
+  const overallPct = totalPlanM > 0
+    ? Math.min(100, Math.round(totalDoneM / totalPlanM * 100)) : 0;
+  document.getElementById('overall-bar-fill').style.width = overallPct + '%';
+  document.getElementById('overall-pct').textContent = overallPct + '%';
+
+  // ── サイクル計算 ──────────────────────────────────────────
+  const cycle    = getCurrentCycle();
+  const capacity = getCycleCapacity();
+
+  // 参照日インジケーター
+  const refEl = document.getElementById('progress-ref-date');
+  if (refEl) {
+    const hasPlan = tasks.length > 0;
+    if (!hasPlan) {
+      refEl.innerHTML = '';
+    } else {
+      const rdStr = cycle.remainDays.length > 0
+        ? cycle.remainDays.map(d => {
+            const h = capacity.dayDetails.find(x => x.day === d)?.hours || 0;
+            const dow = ['日','月','火','水','木','金','土'][new Date(d+'T00:00:00').getDay()];
+            return `${parseInt(d.slice(8),10)}(${dow})=${h>0?h+'h':'未登録'}`;
+          }).join('　')
+        : '残り営業日なし';
+      refEl.innerHTML =
+        `📅 サイクル: ${fmtDate(cycle.start)}〜${fmtDate(cycle.end)}　` +
+        `残${cycle.remainDays.length}営業日　` + rdStr;
+      refEl.style.color = 'var(--muted)';
+    }
+  }
+
+  // ── アラートバー ──────────────────────────────────────────
+  const alertBar = document.getElementById('alert-bar');
+  const hasPlan  = tasks.length > 0;
+  const capM     = capacity.totalMinutes;
+  const capH     = capacity.totalHours;
+  const diffM    = capM - totalRemainM;
+
+  if (!hasPlan) {
+    // 計画なし（暫定モード）
+    alertBar.className = 'neutral';
+    alertBar.innerHTML =
+      '📋 暫定モード（注文確定待ち）<br>' +
+      '<span style="font-size:13px;font-weight:400;">' +
+      `②納品計画を登録すると工数アラートが表示されます</span>`;
+
+  } else if (capH === 0) {
+    // 計画あり・勤怠未登録
+    alertBar.className = 'neutral';
+    alertBar.innerHTML =
+      '⑧勤怠タブでサイクル内の出勤メンバーを登録してください<br>' +
+      '<span style="font-size:13px;font-weight:400;">' +
+      `残り工数: ${(totalRemainM/60).toFixed(1)}h　` +
+      `サイクル: ${fmtDate(cycle.start)}〜${fmtDate(cycle.end)}</span>`;
+
+  } else {
+    // 計画あり・勤怠あり → 確定モード
+    const diffH    = Math.abs(diffM / 60).toFixed(1);
+    const remainH  = (totalRemainM / 60).toFixed(1);
+    const capLabel = capH.toFixed(1);
+    const cycleInfo =
+      `<span style="font-size:13px;font-weight:400;">` +
+      `サイクル残稼働 ${capLabel}h ／ 残り工数 ${remainH}h　` +
+      `📅 ${fmtDate(cycle.start)}〜${fmtDate(cycle.end)} ` +
+      `残${cycle.remainDays.length}営業日</span>`;
+
+    if (diffM >= 0) {
+      alertBar.className = 'surplus';
+      alertBar.innerHTML = `✅ ${diffH}時間 余裕<br>${cycleInfo}`;
+    } else {
+      alertBar.className = 'shortage';
+      alertBar.innerHTML = `⚠️ ${diffH}時間 不足！<br>${cycleInfo}`;
+    }
+  }
+
+  // ── タスクリスト ──────────────────────────────────────────
+  const listEl = document.getElementById('task-list');
+  if (!tasks.length) {
+    listEl.innerHTML =
+      '<div style="text-align:center;color:var(--muted);padding:40px 20px;font-size:13px;">' +
+      '②納品計画からタスクを登録するとここに表示されます</div>';
+    return;
+  }
+
+  // 優先 → 納期昇順ソート
+  tasks.sort((a, b) => {
+    const pa = a.priority ? 0 : 1, pb = b.priority ? 0 : 1;
+    if (pa !== pb) return pa - pb;
+    return new Date(a.date) - new Date(b.date);
+  });
+  listEl.innerHTML = tasks.map(t => buildTaskCardHTML(t)).join('');
+}
+
+
+function buildTaskList() {
+  return st.plans.map(plan => {
+    const item = st.itemMaster.find(i=>i.id===plan.itemId)
+      || { name:plan.itemId||'（品目不明）', color:'', prePh:0, postPh:0 };
+    const prog     = st.progress[plan.id]||{preDone:0,postDone:0};
+    const qty      = toNum(plan.qty);
+    const preDone  = toNum(prog.preDone);
+    const postDone = toNum(prog.postDone);
+    const prePh    = toNum(item.prePh), postPh = toNum(item.postPh);
+    const prePlanM=prePh*qty, postPlanM=postPh*qty;
+    const preActM=prePh*preDone, postActM=postPh*postDone;
+    const preRemainM=Math.max(0,prePlanM-preActM), postRemainM=Math.max(0,postPlanM-postActM);
+    return {
+      id:plan.id, date:plan.date, itemName:item.name, itemColor:item.color,
+      qty, preDone, postDone, prePlanM, postPlanM, preActM, postActM,
+      preRemainM, postRemainM, priority:!!plan.priority,
+      daysLeft:dateDiff(todayStr(),plan.date)
+    };
+  });
+}
+
+function buildTaskCardHTML(t) {
+  const preBarPct  = t.prePlanM >0?Math.min(100,Math.round(t.preActM /t.prePlanM *100)):100;
+  const postBarPct = t.postPlanM>0?Math.min(100,Math.round(t.postActM/t.postPlanM*100)):100;
+  const preOver=t.preDone>t.qty, postOver=t.postDone>t.qty;
+  const isDone=t.preDone>=t.qty&&t.postDone>=t.qty;
+  let badgeClass='ok',badgeText='';
+  if (isDone)               { badgeClass='done';   badgeText='✓ 完了'; }
+  else if (t.daysLeft<0)   { badgeClass='urgent'; badgeText=`${Math.abs(t.daysLeft)}日超過`; }
+  else if (t.daysLeft===0) { badgeClass='urgent'; badgeText='本日納品！'; }
+  else if (t.daysLeft<=2)  { badgeClass='near';   badgeText=`あと${t.daysLeft}日`; }
+  else                     {                      badgeText=`あと${t.daysLeft}日`; }
+  return `
+<div class="task-card${t.priority?' priority':''}${isDone?' done-card':''}">
+  <div class="task-top">
+    <button class="star-btn" onclick="togglePriority('${t.id}')">${t.priority?'⭐':'☆'}</button>
+    <div class="task-name-wrap">
+      <div class="task-name">${esc(t.itemName)}</div>
+      ${t.itemColor?`<div class="task-color">${esc(t.itemColor)}</div>`:''}
+    </div>
+    <span class="deadline-badge ${badgeClass}">${badgeText}</span>
+  </div>
+  <div class="process-row">
+    <div class="proc-box">
+      <div class="proc-label">前工程</div>
+      <div class="proc-input-row">
+        <button class="proc-btn" onclick="adjustProg('${t.id}','pre',-1)">−</button>
+        <input type="number" class="proc-val" value="${t.preDone}" min="0" onchange="setProg('${t.id}','pre',this.value)">
+        <button class="proc-btn" onclick="adjustProg('${t.id}','pre',1)">＋</button>
+      </div>
+      <div class="proc-plan">予定: ${t.qty} 個</div>
+      <div class="proc-remain">${t.preRemainM>0?'残 '+fmtMin(t.preRemainM):'✓ 完了'}</div>
+      <div class="prog-bar-bg"><div class="prog-bar-fill pre${preOver?' over':''}" style="width:${preBarPct}%"></div></div>
+    </div>
+    <div class="proc-box">
+      <div class="proc-label">後工程</div>
+      <div class="proc-input-row">
+        <button class="proc-btn" onclick="adjustProg('${t.id}','post',-1)">−</button>
+        <input type="number" class="proc-val" value="${t.postDone}" min="0" onchange="setProg('${t.id}','post',this.value)">
+        <button class="proc-btn" onclick="adjustProg('${t.id}','post',1)">＋</button>
+      </div>
+      <div class="proc-plan">予定: ${t.qty} 個</div>
+      <div class="proc-remain">${t.postRemainM>0?'残 '+fmtMin(t.postRemainM):'✓ 完了'}</div>
+      <div class="prog-bar-bg"><div class="prog-bar-fill post${postOver?' over':''}" style="width:${postBarPct}%"></div></div>
+    </div>
+  </div>
+  <div class="task-meta">
+    <span>📅 <strong>${fmtDate(t.date)}</strong></span>
+    <span>📦 予定数: <strong>${t.qty}個</strong></span>
+  </div>
+</div>`;
+}
+
+// ============================================================
+// ②納品計画タブ 描画
+// ============================================================
+function renderPlanList() {
+  const sel = document.getElementById('plan-item');
+  if (sel) {
+    const curVal=sel.value;
+    sel.innerHTML='<option value="">-- 品目を選択 --</option>';
+    st.itemMaster.forEach(it => {
+      const opt=document.createElement('option');
+      opt.value=it.id; opt.textContent=it.name+(it.color?` (${it.color})`:'');
+      if (it.id===curVal) opt.selected=true;
+      sel.appendChild(opt);
+    });
+  }
+  const listEl=document.getElementById('plan-list');
+  if (!listEl) return;
+  if (!st.plans.length) {
+    listEl.innerHTML=`<div style="text-align:center;color:var(--muted);padding:30px;font-size:13px;">計画がまだありません</div>`;
+    return;
+  }
+  const today=todayStr();
+  const sorted=[...st.plans].sort((a,b)=>new Date(a.date)-new Date(b.date));
+  listEl.innerHTML=sorted.map(p => {
+    const item=st.itemMaster.find(i=>i.id===p.itemId);
+    const name=item?item.name:(p.itemId||'（品目不明）');
+    const color=item?(item.color||''):''; 
+    const d=dateDiff(today,p.date);
+    let dLabel;
+    if (d<0)        dLabel=`<span style="color:var(--r)">期限${Math.abs(d)}日超過</span>`;
+    else if (d===0) dLabel=`<span style="color:var(--r)">本日！</span>`;
+    else            dLabel=`<span style="color:var(--t)">あと${d}日</span>`;
+    return `
+<div class="plan-item${p.priority?' plan-priority':''}">
+  <div class="plan-item-info">
+    <div class="plan-item-name">${esc(name)}${color?` <span style="color:var(--muted);font-size:11px;">(${esc(color)})</span>`:''}</div>
+    <div class="plan-item-meta">📅 ${fmtDate(p.date)} ${dLabel}${p.memo?`　📝 ${esc(p.memo)}`:''}</div>
+  </div>
+  <span class="plan-item-qty">${toNum(p.qty)}個</span>
+  <button class="btn-star" onclick="togglePlanPriority('${p.id}')">${p.priority?'⭐':'☆'}</button>
+  <button class="btn-del"  onclick="deletePlan('${p.id}')">削除</button>
+</div>`;
+  }).join('');
+}
+
+// ============================================================
+// ⑥品目タブ 描画（全件・省略なし）
+// ============================================================
+function renderItemList() {
+  const el=document.getElementById('item-list');
+  if (!el) return;
+  const total=st.itemMaster.length;
+  document.getElementById('item-count').textContent=`${total} 件`;
+  if (!total) {
+    el.innerHTML=`<div style="text-align:center;color:var(--muted);padding:30px;font-size:13px;">品目がありません。CSVファイルをインポートしてください</div>`;
+    return;
+  }
+  const groups={};
+  st.itemMaster.forEach(it => {
+    const g=it.group||'（未分類）';
+    if (!groups[g]) groups[g]=[];
+    groups[g].push(it);
+  });
+  const htmlParts=[];
+  Object.keys(groups).forEach(g => {
+    const gItems=groups[g];
+    const rowsHtml=gItems.map(it=>`
+      <tr>
+        <td>${esc(it.name)}</td><td>${esc(it.color||'—')}</td>
+        <td style="text-align:right;">${it.prePh}</td><td style="text-align:right;">${it.postPh}</td>
+        <td>${esc(it.sheetNo||'—')}</td><td>${esc(it.cutW||'—')}</td>
+        <td>${esc(it.cutL||'—')}</td><td>${esc(it.group||'—')}</td>
+      </tr>`).join('');
+    htmlParts.push(`
+<div>
+  <div class="acc-header open" onclick="toggleAcc(this)">
+    <span class="acc-label">📁 ${esc(g)} (${gItems.length}件)</span>
+    <span class="acc-arrow">▶</span>
+  </div>
+  <div class="acc-body open">
+    <table class="item-table">
+      <thead><tr><th>品目名</th><th>カラー</th><th>前(分)</th><th>後(分)</th><th>品番</th><th>幅</th><th>長</th><th>グループ</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  </div>
+</div>`);
+  });
+  el.innerHTML=htmlParts.join('');
+}
+
+// ============================================================
+// ⑧勤怠タブ: 週次カレンダー
+// ============================================================
+
+/** 週カレンダーを描画 */
+function renderWeekCalendar() {
+  const labelEl=document.getElementById('week-nav-label');
+  const daysEl =document.getElementById('week-days');
+  const ws=attendState.weekStart;
+  const we=addDays(ws,6);
+  labelEl.textContent=`${fmtDate(ws)} 〜 ${fmtDate(we)}`;
+
+  const today=todayStr();
+  const dayLabels=['月','火','水','木','金','土','日'];
+  const dayLabelClasses=['','','','','','sat','sun'];
+
+  daysEl.innerHTML='';
+  let weekTotalH=0;
+  let weekDayCount=0;
+
+  for (let i=0;i<7;i++) {
+    const d=addDays(ws,i);
+    const data=st.weeklyAttend[d];
+    const isOff=data==='off';
+    const isToday=d===today;
+    const isSelected=d===attendState.selectedDate;
+    const hasData=data!==undefined&&data!==null;
+
+    let dayH=0;
+    if (Array.isArray(data)) {
+      dayH=data.reduce((s,m)=>s+toNum(m.hours),0);
+      weekTotalH+=dayH; weekDayCount++;
+    }
+
+    const cell=document.createElement('div');
+    let cls='day-cell';
+    if (isSelected) cls+=' selected';
+    if (isToday)    cls+=' today';
+    if (hasData)    cls+=' has-data';
+    if (isOff)      cls+=' off';
+    cell.className=cls;
+    cell.onclick=()=>selectDay(d);
+
+    const lbl=document.createElement('div');
+    lbl.className='day-label'+(i>=5?' sat':'')+(i===6?' sun':'');
+    // i=0:月 〜 i=5:土 i=6:日
+    const wdLabels=['月','火','水','木','金','土','日'];
+    const wdClasses=[''  ,''  ,''  ,''  ,''  ,'sat','sun'];
+    lbl.className='day-label'+( i===5?' sat':i===6?' sun':'' );
+    lbl.textContent=wdLabels[i];
+
+    const num=document.createElement('div');
+    num.className='day-num';
+    num.textContent=parseInt(d.slice(8),10);
+
+    const hrs=document.createElement('div');
+    hrs.className='day-hours';
+    if (isOff)           hrs.textContent='休業';
+    else if (dayH>0)     hrs.textContent=dayH.toFixed(1)+'h';
+    else if (hasData)    hrs.textContent='登録済';
+    else                 hrs.textContent='—';
+
+    cell.appendChild(lbl);
+    cell.appendChild(num);
+    cell.appendChild(hrs);
+    daysEl.appendChild(cell);
+  }
+
+  // 週合計
+  document.getElementById('week-total-val').textContent=weekTotalH>0?`${weekTotalH.toFixed(1)} 時間`:'— 時間';
+  document.getElementById('week-total-sub').textContent=`${weekDayCount} 日分登録`;
+}
+
+/** 日付セルを選択 */
+function selectDay(dateStr) {
+  attendState.selectedDate=dateStr;
+  renderWeekCalendar();
+  renderDayEdit();
+}
+
+/** 週移動 */
+function changeWeek(delta) {
+  attendState.weekStart=addDays(attendState.weekStart, delta*7);
+  renderWeekCalendar();
+  renderDayEdit();
+}
+
+/** 選択日の編集エリアを描画 */
+function renderDayEdit() {
+  const d=attendState.selectedDate;
+  if (!d) return;
+
+  document.getElementById('day-edit-title').textContent=`📅 ${fmtDate(d)}`;
+
+  const data=st.weeklyAttend[d];
+  const isOff=data==='off';
+
+  document.getElementById('day-off-check').checked=isOff;
+
+  // メンバーリストを再構築（この日のデータで）
+  const members=Array.isArray(data)?data:[];
+  rebuildAttendMemberDom(members, isOff);
+  recalcAttendTotal();
+}
+
+/** ⑧勤怠: メンバーリストDOMを再構築 */
+function rebuildAttendMemberDom(members, isOff) {
+  const listEl=document.getElementById('attend-member-list');
+  const emptyEl=document.getElementById('attend-empty-msg');
+  if (!listEl) return;
+
+  // 既存行を削除
+  listEl.querySelectorAll('.member-row').forEach(r=>r.remove());
+
+  if (isOff) {
+    if (emptyEl) { emptyEl.textContent='休業日として設定されています'; emptyEl.style.display=''; }
+    return;
+  }
+
+  if (emptyEl) {
+    emptyEl.textContent='メンバーを追加するか、基本シフトから読み込んでください';
+    emptyEl.style.display=members.length?'none':'';
+  }
+
+  members.forEach((m,i)=>appendAttendRow(i,m.name,m.hours));
+}
+
+/** ⑧勤怠: メンバー行を1行追加 */
+function appendAttendRow(idx, name, hours) {
+  const listEl=document.getElementById('attend-member-list');
+  const emptyEl=document.getElementById('attend-empty-msg');
+  if (!listEl) return;
+  if (emptyEl) emptyEl.style.display='none';
+
+  const row=document.createElement('div');
+  row.className='member-row';
+  row.dataset.idx=String(idx);
+
+  const nameInput=document.createElement('input');
+  nameInput.type='text'; nameInput.className='member-name-input';
+  nameInput.placeholder='名前'; nameInput.value=name;
+  nameInput.addEventListener('change',()=>{
+    const i=parseInt(row.dataset.idx,10);
+    const d=attendState.selectedDate;
+    const arr=getAttendArr(d); if (arr[i]!==undefined) arr[i].name=nameInput.value;
+  });
+
+  const hoursInput=document.createElement('input');
+  hoursInput.type='number'; hoursInput.className='member-hours-input';
+  hoursInput.value=hours; hoursInput.min='0'; hoursInput.max='24'; hoursInput.step='0.5';
+  hoursInput.addEventListener('input',()=>{
+    const i=parseInt(row.dataset.idx,10);
+    const d=attendState.selectedDate;
+    const arr=getAttendArr(d); if (arr[i]!==undefined) arr[i].hours=toNum(hoursInput.value);
+    recalcAttendTotal();
+    renderProgress();
+  });
+
+  const unit=document.createElement('span');
+  unit.className='member-unit'; unit.textContent='時間';
+
+  const delBtn=document.createElement('button');
+  delBtn.className='btn-del'; delBtn.textContent='削除';
+  delBtn.addEventListener('click',()=>{
+    const i=parseInt(row.dataset.idx,10);
+    const d=attendState.selectedDate;
+    const arr=getAttendArr(d); arr.splice(i,1);
+    st.weeklyAttend[d]=arr;
+    row.remove();
+    reindexAttendRows();
+    recalcAttendTotal();
+    renderProgress();
+    renderWeekCalendar();
+    if (arr.length===0&&emptyEl) { emptyEl.textContent='メンバーを追加するか、基本シフトから読み込んでください'; emptyEl.style.display=''; }
+  });
+
+  row.appendChild(nameInput); row.appendChild(hoursInput);
+  row.appendChild(unit); row.appendChild(delBtn);
+  listEl.appendChild(row);
+}
+
+function reindexAttendRows() {
+  document.getElementById('attend-member-list')
+    .querySelectorAll('.member-row').forEach((r,i)=>r.dataset.idx=String(i));
+}
+
+/** 選択日のメンバー配列を取得（なければ空配列を作成） */
+function getAttendArr(dateStr) {
+  if (!Array.isArray(st.weeklyAttend[dateStr])) st.weeklyAttend[dateStr]=[];
+  return st.weeklyAttend[dateStr];
+}
+
+/** 合計を再計算してDOMを更新 */
+function recalcAttendTotal() {
+  syncAttendDomToState();
+  const d=attendState.selectedDate;
+  const data=st.weeklyAttend[d];
+  const isOff=data==='off';
+  const members=Array.isArray(data)?data:[];
+  const total=members.reduce((s,m)=>s+toNum(m.hours),0);
+  const cnt=members.length;
+  document.getElementById('attend-total-val').textContent=isOff?'休業日':`${total.toFixed(1)} 時間`;
+  document.getElementById('attend-total-sub').textContent=isOff?'—':`${cnt} 人`;
+}
+
+/** DOMのinput値をstateに同期 */
+function syncAttendDomToState() {
+  const d=attendState.selectedDate;
+  if (!d || st.weeklyAttend[d]==='off') return;
+  const arr=getAttendArr(d);
+  document.getElementById('attend-member-list').querySelectorAll('.member-row').forEach((row,i)=>{
+    const nameInput =row.querySelector('.member-name-input');
+    const hoursInput=row.querySelector('.member-hours-input');
+    if (arr[i]===undefined) arr[i]={name:'',hours:0};
+    if (nameInput)  arr[i].name =nameInput.value;
+    if (hoursInput) arr[i].hours=toNum(hoursInput.value);
+  });
+}
+
+/** 休業チェックボックスのトグル */
+function onDayOffToggle() {
+  const d=attendState.selectedDate;
+  const isOff=document.getElementById('day-off-check').checked;
+  if (isOff) {
+    st.weeklyAttend[d]='off';
+  } else {
+    st.weeklyAttend[d]=[];
+  }
+  saveLocal();
+  renderDayEdit();
+  renderWeekCalendar();
+  renderProgress();
+}
+
+/** 基本シフトをこの日に読み込む */
+function loadBaseShiftToDay() {
+  syncMemberDomToState('shift');
+  if (!st.baseShift.length) { alert('⑤シフトタブで基本シフトを登録してください'); return; }
+  const d=attendState.selectedDate;
+  st.weeklyAttend[d]=st.baseShift.map(m=>({name:m.name,hours:m.hours}));
+  saveLocal();
+  renderDayEdit();
+  recalcAttendTotal();
+  renderWeekCalendar();
+  renderProgress();
+}
+
+/** この日のメンバーを追加 */
+function addAttendMember() {
+  const d=attendState.selectedDate;
+  if (!d) return;
+  const arr=getAttendArr(d);
+  const newM={name:'',hours:8.0};
+  arr.push(newM);
+  appendAttendRow(arr.length-1,newM.name,newM.hours);
+  recalcAttendTotal();
+  renderProgress();
+}
+
+/** この日の勤怠を保存 */
+async function saveDayAttendance() {
+  syncAttendDomToState();   // DOMの入力値をstateに反映
+  saveLocal();              // localStorageへ保存
+  renderProgress();         // 即座に進捗タブを更新（保存ボタン押下と同時に反映）
+  renderWeekCalendar();     // カレンダーのドット表示を更新
+  showStatus('attend-status','💾 保存中...','var(--y)');
+  const r=await Cloud.saveShiftAttendance();
+  if (r&&r.ok) showStatus('attend-status','✅ 保存しました（クラウド同期済み）','var(--g)');
+  else         showStatus('attend-status','⚠️ ローカル保存済み（クラウド保存失敗）','var(--y)');
+}
+
+// ============================================================
+// ⑤シフト: DOMベースのメンバー行管理
+// ============================================================
+function rebuildMemberDom(type) {
+  const listEl =document.getElementById('shift-member-list');
+  const emptyEl=document.getElementById('shift-empty-msg');
+  if (!listEl) return;
+  listEl.querySelectorAll('.member-row').forEach(r=>r.remove());
+  if (emptyEl) emptyEl.style.display=st.baseShift.length?'none':'';
+  st.baseShift.forEach((m,i)=>appendShiftRow(i,m.name,m.hours));
+  recalcShiftTotal();
+}
+
+function appendShiftRow(idx, name, hours) {
+  const listEl =document.getElementById('shift-member-list');
+  const emptyEl=document.getElementById('shift-empty-msg');
+  if (!listEl) return;
+  if (emptyEl) emptyEl.style.display='none';
+
+  const row=document.createElement('div');
+  row.className='member-row'; row.dataset.idx=String(idx);
+
+  const nameInput=document.createElement('input');
+  nameInput.type='text'; nameInput.className='member-name-input';
+  nameInput.placeholder='名前'; nameInput.value=name;
+  nameInput.addEventListener('change',()=>{
+    const i=parseInt(row.dataset.idx,10);
+    if (st.baseShift[i]!==undefined) st.baseShift[i].name=nameInput.value;
+  });
+
+  const hoursInput=document.createElement('input');
+  hoursInput.type='number'; hoursInput.className='member-hours-input';
+  hoursInput.value=hours; hoursInput.min='0'; hoursInput.max='24'; hoursInput.step='0.5';
+  hoursInput.addEventListener('input',()=>{
+    const i=parseInt(row.dataset.idx,10);
+    if (st.baseShift[i]!==undefined) st.baseShift[i].hours=toNum(hoursInput.value);
+    recalcShiftTotal();
+  });
+
+  const unit=document.createElement('span');
+  unit.className='member-unit'; unit.textContent='時間';
+
+  const delBtn=document.createElement('button');
+  delBtn.className='btn-del'; delBtn.textContent='削除';
+  delBtn.addEventListener('click',()=>{
+    const i=parseInt(row.dataset.idx,10);
+    st.baseShift.splice(i,1);
+    row.remove();
+    document.getElementById('shift-member-list').querySelectorAll('.member-row').forEach((r,j)=>r.dataset.idx=String(j));
+    if (st.baseShift.length===0&&emptyEl) emptyEl.style.display='';
+    recalcShiftTotal();
+  });
+
+  row.appendChild(nameInput); row.appendChild(hoursInput);
+  row.appendChild(unit); row.appendChild(delBtn);
+  listEl.appendChild(row);
+}
+
+function recalcShiftTotal() {
+  syncMemberDomToState('shift');
+  const total=st.baseShift.reduce((s,m)=>s+toNum(m.hours),0);
+  document.getElementById('shift-total-val').textContent=`${total.toFixed(1)} 時間`;
+  document.getElementById('shift-total-sub').textContent=`${st.baseShift.length} 人`;
+}
+
+function syncMemberDomToState(type) {
+  const listEl=document.getElementById('shift-member-list');
+  if (!listEl) return;
+  listEl.querySelectorAll('.member-row').forEach((row,i)=>{
+    const ni=row.querySelector('.member-name-input');
+    const hi=row.querySelector('.member-hours-input');
+    if (st.baseShift[i]===undefined) st.baseShift[i]={name:'',hours:0};
+    if (ni) st.baseShift[i].name =ni.value;
+    if (hi) st.baseShift[i].hours=toNum(hi.value);
+  });
+}
+
+function addShiftMember() {
+  const m={name:'',hours:8.0}; st.baseShift.push(m);
+  appendShiftRow(st.baseShift.length-1,m.name,m.hours);
+  recalcShiftTotal();
+}
+
+async function saveBaseShift() {
+  syncMemberDomToState('shift');
+  saveLocal();
+  showStatus('shift-status','💾 保存中...','var(--y)');
+  const r=await Cloud.saveShiftAttendance();
+  if (r&&r.ok) showStatus('shift-status','✅ 基本シフトを保存しました','var(--g)');
+  else         showStatus('shift-status','⚠️ ローカル保存済み（クラウド保存失敗）','var(--y)');
+}
+
+// ============================================================
+// アクション：①進捗
+// ============================================================
+function adjustProg(planId,proc,delta) {
+  ensureProgress(planId);
+  const key=proc==='pre'?'preDone':'postDone';
+  st.progress[planId][key]=Math.max(0,toNum(st.progress[planId][key])+delta);
+  saveLocal(); Cloud.savePlansProgress(); renderProgress();
+}
+function setProg(planId,proc,val) {
+  ensureProgress(planId);
+  const key=proc==='pre'?'preDone':'postDone';
+  st.progress[planId][key]=Math.max(0,toNum(val));
+  saveLocal(); Cloud.savePlansProgress(); renderProgress();
+}
+function togglePriority(planId) {
+  const plan=st.plans.find(p=>p.id===planId); if (!plan) return;
+  plan.priority=!plan.priority;
+  saveLocal(); Cloud.savePlansProgress(); renderProgress(); renderPlanList();
+}
+function ensureProgress(planId) {
+  if (!st.progress[planId]) st.progress[planId]={preDone:0,postDone:0};
+}
+
+// ============================================================
+// アクション：②納品計画
+// ============================================================
+function addPlan() {
+  const date    =document.getElementById('plan-date').value;
+  const itemId  =document.getElementById('plan-item').value;
+  const qty     =toNum(document.getElementById('plan-qty').value);
+  const memo    =document.getElementById('plan-memo').value.trim();
+  const priority=document.getElementById('plan-priority').checked;
+  if (!date||!itemId||qty<1) { alert('納期・品目・数量（1以上）を入力してください'); return; }
+  const id='p'+Date.now()+Math.random().toString(36).slice(2,6);
+  st.plans.push({id,date,itemId,qty,memo,priority});
+  st.progress[id]={preDone:0,postDone:0};
+  saveLocal(); Cloud.savePlansProgress();
+  document.getElementById('plan-qty').value='1';
+  document.getElementById('plan-memo').value='';
+  document.getElementById('plan-priority').checked=false;
+  renderProgress(); renderPlanList();
+}
+function togglePlanPriority(planId) {
+  const plan=st.plans.find(p=>p.id===planId); if (!plan) return;
+  plan.priority=!plan.priority;
+  saveLocal(); Cloud.savePlansProgress(); renderPlanList(); renderProgress();
+}
+function deletePlan(id) {
+  if (!confirm('この計画を削除しますか？')) return;
+  st.plans=st.plans.filter(p=>p.id!==id); delete st.progress[id];
+  saveLocal(); Cloud.savePlansProgress(); renderProgress(); renderPlanList();
+}
+
+// ============================================================
+// アクション：⑥品目CSVインポート
+// ============================================================
+function onDragOver(event) { event.preventDefault(); event.stopPropagation(); document.getElementById('file-drop-zone').classList.add('dragover'); }
+function onDragLeave(event) { event.preventDefault(); document.getElementById('file-drop-zone').classList.remove('dragover'); }
+function onDrop(event) {
+  event.preventDefault(); event.stopPropagation();
+  document.getElementById('file-drop-zone').classList.remove('dragover');
+  const files=event.dataTransfer.files; if (files&&files.length>0) readCsvFile(files[0]);
+}
+function onFileSelected(event) { const files=event.target.files; if (files&&files.length>0) readCsvFile(files[0]); }
+function readCsvFile(file) {
+  const fileName=file.name||'';
+  const isCSV=file.type==='text/csv'||file.type==='application/vnd.ms-excel'||fileName.toLowerCase().endsWith('.csv');
+  if (!isCSV) { showStatus('csv-status','⚠️ .csv ファイルを選択してください','var(--r)'); return; }
+  document.getElementById('file-selected-name').textContent=`📄 ${fileName}`;
+  showStatus('csv-status','🔄 ファイル読み込み中...','var(--y)');
+  const reader=new FileReader();
+  reader.onload=function(e) {
+    const result=parseCSVText(e.target.result);
+    if (result.error) { showStatus('csv-status',`⚠️ ${result.error}`,'var(--r)'); pendingCsvItems=[]; setImportBtnEnabled(false); return; }
+    pendingCsvItems=result.items;
+    showStatus('csv-status',`✅ ${pendingCsvItems.length}件 読み込み完了 — 「インポート実行」を押してください`,'var(--t)');
+    setImportBtnEnabled(true);
+  };
+  reader.onerror=function() { showStatus('csv-status','❌ 読み込みに失敗しました','var(--r)'); pendingCsvItems=[]; setImportBtnEnabled(false); };
+  reader.readAsText(file,'UTF-8');
+}
+function setImportBtnEnabled(enabled) {
+  const btn=document.getElementById('import-btn'); if (!btn) return;
+  btn.disabled=!enabled; btn.style.opacity=enabled?'1':'0.4'; btn.style.cursor=enabled?'pointer':'not-allowed';
+}
+function parseCSVText(rawText) {
+  if (!rawText||!rawText.trim()) return {items:[],error:'ファイルが空です'};
+  const allLines=rawText.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').map(l=>l.trim()).filter(l=>l.length>0);
+  if (!allLines.length) return {items:[],error:'有効な行がありません'};
+  const firstCols=parseCsvLine(allLines[0]);
+  const col0lower=(firstCols[0]||'').toLowerCase().trim();
+  const hasHeader=isNaN(parseFloat(col0lower))&&
+    (col0lower.includes('品目')||col0lower.includes('name')||col0lower.includes('item')||col0lower.includes('商品'));
+  const dataLines=hasHeader?allLines.slice(1):allLines;
+  if (!dataLines.length) return {items:[],error:'ヘッダー行以外にデータがありません'};
+  const items=[],baseTime=Date.now();
+  for (let i=0;i<dataLines.length;i++) {
+    const cols=parseCsvLine(dataLines[i]);
+    const name=(cols[0]||'').trim(); if (!name) continue;
+    items.push({id:`item_${baseTime}_${i}`,name,color:(cols[1]||'').trim(),
+      prePh:toNum(cols[2]),postPh:toNum(cols[3]),sheetNo:(cols[4]||'').trim(),
+      cutW:(cols[5]||'').trim(),cutL:(cols[6]||'').trim(),group:(cols[7]||'その他').trim()});
+  }
+  if (!items.length) return {items:[],error:'有効な品目データがありませんでした'};
+  return {items,error:null};
+}
+async function importCSV() {
+  if (!pendingCsvItems||!pendingCsvItems.length) { showStatus('csv-status','⚠️ 先にCSVファイルを選択してください','var(--r)'); return; }
+  st.itemMaster=pendingCsvItems; saveLocal(); renderItemList(); renderPlanList();
+  const fileInput=document.getElementById('csv-file-input'); if (fileInput) fileInput.value='';
+  document.getElementById('file-selected-name').textContent='— ファイル未選択 —';
+  setImportBtnEnabled(false);
+  const count=pendingCsvItems.length; pendingCsvItems=[];
+  showStatus('csv-status',`📤 ${count}件 をクラウドへ保存中...`,'var(--y)');
+  const r=await Cloud.saveItemMaster();
+  if (r&&r.ok) showStatus('csv-status',`✅ ${count}件 をスプレッドシートに保存しました`,'var(--g)');
+  else         showStatus('csv-status',`⚠️ ${count}件 ローカル保存済み（クラウド保存失敗）`,'var(--y)');
+}
+function clearItems() {
+  const cnt=st.itemMaster.length;
+  if (!cnt) { showStatus('csv-status','品目はすでに0件です','var(--muted)'); return; }
+  if (!confirm(`品目マスター ${cnt}件 を全消去しますか？\nこの操作は元に戻せません。`)) return;
+  st.itemMaster=[]; pendingCsvItems=[]; setImportBtnEnabled(false);
+  document.getElementById('file-selected-name').textContent='— ファイル未選択 —';
+  const fi=document.getElementById('csv-file-input'); if(fi) fi.value='';
+  saveLocal(); Cloud.saveItemMaster(); renderItemList(); renderPlanList();
+  showStatus('csv-status','🗑️ 品目マスターを全消去しました','var(--muted)');
+}
+function parseCsvLine(line) {
+  const result=[]; let cur='',inQ=false;
+  for (let i=0;i<line.length;i++) {
+    const ch=line[i];
+    if (inQ) {
+      if (ch==='"'&&i+1<line.length&&line[i+1]==='"') { cur+='"'; i++; }
+      else if (ch==='"') inQ=false;
+      else cur+=ch;
+    } else {
+      if (ch==='"') inQ=true;
+      else if (ch===',') { result.push(cur); cur=''; }
+      else cur+=ch;
+    }
+  }
+  result.push(cur); return result;
+}
+
+// ============================================================
+// アクション：⚙️設定
+// ============================================================
+async function saveGasUrl() {
+  const url=document.getElementById('gas-url-input').value.trim();
+  if (!url) { alert('URLを入力してください'); return; }
+  st.gasUrl=url; localStorage.setItem('gasUrl',url);
+  showStatus('settings-status','🔄 接続テスト中...','var(--y)');
+  setConn('wait','接続中...');
+  await pullFromCloud();
+}
+
+// ============================================================
+// UI ヘルパー
+// ============================================================
+function switchTab(name,btn) {
+  // タブ切り替え前に勤怠入力中の値をstateに同期しておく
+  if (document.getElementById('panel-attendance') &&
+      document.getElementById('panel-attendance').classList.contains('active')) {
+    syncAttendDomToState();
+  }
+
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+  if (btn) btn.classList.add('active');
+
+  // どのタブに切り替えても進捗バーを最新化する
+  renderProgress();
+
+  if (name==='shift') recalcShiftTotal();
+  if (name==='attendance') {
+    // 勤怠タブを開くたびに「今日」の日付を自動選択する
+    // 今週の範囲外なら weekStart を今週に戻す
+    const todayD = todayStr();
+    const todayMonday = getMonday(todayD);
+    attendState.weekStart    = todayMonday;
+    attendState.selectedDate = todayD;
+    renderWeekCalendar();
+    renderDayEdit();
+  }
+}
+function toggleAcc(header) {
+  header.classList.toggle('open');
+  const body=header.nextElementSibling; if(body) body.classList.toggle('open');
+}
+function setConn(type,label) {
+  document.getElementById('conn-dot').className=type;
+  document.getElementById('conn-label').textContent=label;
+  if (type==='ok') showStatus('settings-status','✅ 接続成功！データを同期しました','var(--g)');
+  if (type==='ng') showStatus('settings-status','❌ 接続失敗（URLを確認してください）','var(--r)');
+}
+function showStatus(id,msg,color) {
+  const el=document.getElementById(id); if (!el) return;
+  el.innerHTML=`<span style="color:${color};">${msg}</span>`;
+  if (!msg.includes('中...')) { setTimeout(()=>{ if(el.innerHTML.includes(msg)) el.innerHTML=''; },5000); }
+}
+
+// ============================================================
+// ユーティリティ
+// ============================================================
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function toNum(v) {
+  if (v===null||v===undefined||v==='') return 0;
+  const n=parseFloat(String(v)); return isNaN(n)?0:n;
+}
+function todayStr() {
+  const d=new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function addDays(dateStr, n) {
+  const d=new Date(dateStr+'T00:00:00'); d.setDate(d.getDate()+n);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+/** その週の月曜日を返す */
+function getMonday(dateStr) {
+  const d=new Date(dateStr+'T00:00:00');
+  const day=d.getDay(); // 0=日,1=月,...6=土
+  const diff=day===0?-6:1-day; // 月曜へのオフセット
+  d.setDate(d.getDate()+diff);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function dateDiff(from,to) {
+  const a=new Date(from+'T00:00:00'), b=new Date(to+'T00:00:00');
+  return Math.round((b-a)/(1000*60*60*24));
+}
+function fmtMin(m) {
+  m=Math.round(m); if(m<=0) return '0分';
+  const h=Math.floor(m/60), mn=m%60;
+  if(h===0) return `${mn}分`; if(mn===0) return `${h}時間`;
+  return `${h}時間${mn}分`;
+}
+/**
+ * 日付文字列 'YYYY-MM-DD' → '2026年6月7日（日）'
+ * GASから来た長い日付文字列は sanitizeDateStr で事前に正規化してから渡すこと
+ */
+function fmtDate(dateStr) {
+  if (!dateStr) return '';
+  const s=sanitizeDateStr(dateStr);
+  if (!s.match(/^\d{4}-\d{2}-\d{2}$/)) return s;
+  const d=new Date(s+'T00:00:00');
+  if (isNaN(d.getTime())) return s;
+  const youbi=['日','月','火','水','木','金','土'][d.getDay()];
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${youbi}）`;
+}
+/**
+ * 様々な形式の日付文字列を 'YYYY-MM-DD' に正規化する
+ * 対応形式:
+ *   'YYYY-MM-DD'          → そのまま
+ *   'YYYY/MM/DD'          → ハイフン変換
+ *   'Tue Jun 09 2026 ...' → Date()でパースしてフォーマット
+ *   その他                → Date()でパース試行
+ */
+function sanitizeDateStr(v) {
+  if (!v) return '';
+  const s=String(v).trim();
+  // 既に YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  // YYYY/MM/DD
+  if (/^\d{4}\/\d{2}\/\d{2}$/.test(s)) return s.replace(/\//g,'-');
+  // その他（Dateとしてパース）
+  const d=new Date(s);
+  if (!isNaN(d.getTime())) {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  return s;
+}
+
+// ============================================================
+// サイクル・祝日ユーティリティ
+// ============================================================
+
+/**
+ * 日本の祝日リスト（2026〜2027年）
+ * 毎年1月に定数を追加更新する。
+ * 形式: 'YYYY-MM-DD'
+ */
+const JAPAN_HOLIDAYS = new Set([
+  // 2026年
+  '2026-01-01','2026-01-12','2026-02-11','2026-02-23',
+  '2026-03-20','2026-04-29','2026-05-03','2026-05-04',
+  '2026-05-05','2026-05-06','2026-07-20','2026-08-11',
+  '2026-09-21','2026-09-22','2026-09-23','2026-10-12',
+  '2026-11-03','2026-11-23','2026-12-23',
+  // 2027年
+  '2027-01-01','2027-01-11','2027-02-11','2027-02-23',
+  '2027-03-21','2027-04-29','2027-05-03','2027-05-04',
+  '2027-05-05','2027-07-19','2027-08-11','2027-09-20',
+  '2027-09-23','2027-10-11','2027-11-03','2027-11-23'
+]);
+
+/**
+ * 指定日が「休業日」かどうか判定する。
+ * 土(6)・日(0)・祝日 = true（休業）
+ * @param {string} dateStr 'YYYY-MM-DD'
+ * @returns {boolean}
+ */
+function isHoliday(dateStr) {
+  if (!dateStr) return false;
+  const d = new Date(dateStr + 'T00:00:00');
+  const dow = d.getDay(); // 0=日, 6=土
+  if (dow === 0 || dow === 6) return true;
+  if (JAPAN_HOLIDAYS.has(dateStr)) return true;
+  // 勤怠タブで「休業」登録された日も休業扱い
+  if (st.weeklyAttend[dateStr] === 'off') return true;
+  return false;
+}
+
+/**
+ * 今日を含む現在のサイクルを返す。
+ * サイクル = 直近の火曜日（過去方向） 〜 その翌月曜日
+ * @returns {{ start: string, end: string, remainDays: string[] }}
+ *   start/end: 'YYYY-MM-DD'
+ *   remainDays: 今日〜終了日の営業日配列（土日祝除外）
+ */
+function getCurrentCycle() {
+  const today = todayStr();
+  const d = new Date(today + 'T00:00:00');
+  const dow = d.getDay(); // 0=日,1=月,2=火,...,6=土
+
+  // 直近の火曜日を計算
+  // 今日が火曜(2)なら今日がサイクル開始
+  // 今日が水(3)〜月(1/8)なら過去方向の火曜
+  let daysToTue;
+  if (dow === 2) {
+    daysToTue = 0;   // 火曜 → 今日がスタート
+  } else if (dow > 2) {
+    daysToTue = dow - 2;  // 水(1),木(2),金(3),土(4),日(5)
+  } else {
+    // 月(1), 日(0)
+    daysToTue = dow + 5;  // 日(5), 月(6) ← 先週火曜まで遡る
+  }
+
+  const cycleStart = addDays(today, -daysToTue);
+  const cycleEnd   = addDays(cycleStart, 6); // 翌月曜
+
+  // 今日〜サイクル終了日の「営業日」を列挙
+  const remainDays = [];
+  for (let i = 0; i <= 6; i++) {
+    const day = addDays(today, i);
+    // サイクル終了日を超えたらストップ
+    if (dateDiff(day, cycleEnd) < 0) break;
+    if (!isHoliday(day)) {
+      remainDays.push(day);
+    }
+  }
+
+  return { start: cycleStart, end: cycleEnd, remainDays };
+}
+
+/**
+ * サイクル内の残り稼働可能時間（分）を計算する。
+ * 今日〜サイクル終了日の勤怠登録済み時間を合計する。
+ * 未登録日は0として扱う（IV-A方式）。
+ * 土日祝は自動的に0。
+ * @returns {{ totalMinutes: number, totalHours: number, detail: string }}
+ */
+function getCycleCapacity() {
+  const { remainDays } = getCurrentCycle();
+  let totalH = 0;
+  const dayDetails = [];
+
+  remainDays.forEach(day => {
+    const data = st.weeklyAttend[day];
+    let h = 0;
+    if (Array.isArray(data) && data.length > 0) {
+      h = data.reduce((s, m) => s + toNum(m.hours), 0);
+    }
+    totalH += h;
+    dayDetails.push({ day, hours: h });
+  });
+
+  return {
+    totalMinutes: totalH * 60,
+    totalHours:   totalH,
+    remainDays,
+    dayDetails
+  };
+}
+</script>
+</body>
+</html>
