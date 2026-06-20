@@ -501,8 +501,8 @@ function isWorkday(s) {
 function getCurrentCycle() {
   const today = todayStr();
   const d = new Date(today + 'T00:00:00');
-  const dow = d.getDay(); // 0=日
-  const diffToTue = (dow + 6) % 7; // 火=0
+  const dow = d.getDay(); // 0=日,1=月,2=火...
+  const diffToTue = (dow - 2 + 7) % 7; // 火曜=0になるよう計算
   const tue = addDays(today, -diffToTue);
   const days = [];
   for (let i = 0; i < 7; i++) {
@@ -1093,9 +1093,10 @@ function renderWeekHeader() {
   if (labelEl) {
     const s = new Date(cycleStart + 'T00:00:00');
     const e = new Date(addDays(cycleStart, 6) + 'T00:00:00');
+    const wd = '日月火水木金土';
     labelEl.textContent =
-      `${s.getMonth()+1}/${s.getDate()}（${'日月火水木金土'[s.getDay()]}）〜 ` +
-      `${e.getMonth()+1}/${e.getDate()}（${'日月火水木金土'[e.getDay()]}）`;
+      `${s.getMonth()+1}/${s.getDate()}（${wd[s.getDay()]}）〜 ` +
+      `${e.getMonth()+1}/${e.getDate()}（${wd[e.getDay()]}）`;
   }
   // 今週ボタンの表示切替
   const todayBtn = document.getElementById('btn-today-week');
