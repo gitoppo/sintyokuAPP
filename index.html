@@ -127,16 +127,16 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 .device-notice{background:#1a1a2e;border:1px solid var(--pu);border-radius:8px;padding:12px;text-align:center;color:var(--pu);margin-bottom:12px}
 /* 個人進捗 2カラム */
 .personal-2col{display:flex;gap:10px;min-height:0}
-.personal-left{flex:1;min-width:0;overflow-y:auto;max-height:calc(100vh - 140px)}
-.personal-right{width:200px;flex-shrink:0;overflow-y:auto;max-height:calc(100vh - 140px)}
+.personal-left{flex:0 0 35%;min-width:0;overflow-y:auto;max-height:calc(100vh - 140px)}
+.personal-right{flex:0 0 65%;min-width:0;overflow-y:auto;max-height:calc(100vh - 140px)}
 .post-input-item{padding:8px 6px;border-bottom:1px solid #0d1520}
 .post-input-item:last-child{border-bottom:none}
 .post-item-label{font-size:12px;color:var(--muted);margin-bottom:6px;line-height:1.4}
 .post-item-qty{color:var(--t);font-weight:700;font-size:12px}
 .post-adj-row{display:flex;align-items:center;gap:5px}
-.post-adj-btn{width:34px;height:34px;border-radius:7px;border:1px solid var(--border);background:var(--faint);color:var(--text);font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer}
+.post-adj-btn{width:38px;height:38px;border-radius:7px;border:1px solid var(--border);background:var(--faint);color:var(--text);font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer}
 .post-adj-btn:active{background:var(--border)}
-.post-num-input{width:58px;height:34px;text-align:center;font-size:15px;font-weight:700;border:1px solid var(--border);border-radius:7px;background:var(--faint);color:var(--text)}
+.post-num-input{flex:1;min-width:0;height:38px;text-align:center;font-size:16px;font-weight:700;border:1px solid var(--border);border-radius:7px;background:var(--faint);color:var(--text)}
 </style>
 </head>
 <body>
@@ -846,30 +846,60 @@ function renderPersonal() {
   tbodyHtml += `<tr class="total-row"><td>合計</td><td>${totalToday}個</td><td>${totalCycle}個</td></tr>`;
   tbody.innerHTML = tbodyHtml;
 
-  // 後工程入力エリア（右カラム用・コンパクトデザイン）
+  // 後工程入力エリア（品目マスター登録順で固定）
   let inputHtml = '';
-  Object.entries(groupMap).forEach(([name, items]) => {
-    items.forEach(r => {
+  // 品目マスター登録順でループ
+  st.itemMaster.forEach(masterItem => {
+    // このmasterItemに対応するplanを全て取得
+    const matchPlans = rows.filter(r => r.item.id === masterItem.id);
+    if (!matchPlans.length) return;
+    matchPlans.forEach(r => {
       const val = dn ? toNum((st.progress[r.plan.id]?.postDone||{})[dn]) : 0;
       const qty = toNum(r.plan.qty);
-      // 達成率で色変え
       const pct = qty > 0 ? Math.min(100, Math.round(val / qty * 100)) : 0;
       const valColor = pct >= 100 ? 'var(--g)' : pct >= 50 ? 'var(--b)' : 'var(--text)';
+      const pctColor = pct >= 100 ? 'var(--g)' : pct >= 50 ? 'var(--b)' : 'var(--muted)';
       inputHtml += `<div class="post-input-item">
-        <div class="post-item-label">${esc(name)} ${esc(r.item.color)}<br>
-          <span class="post-item-qty">計画: ${qty}個</span>
-          <span style="font-size:11px;color:${valColor};margin-left:4px">${pct}%</span>
+        <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+          <span style="font-size:13px;font-weight:700;color:var(--text)">${esc(r.item.name)}</span>
+          <span style="font-size:12px;color:var(--muted)">${esc(r.item.color)}</span>
+          <span style="font-size:11px;color:var(--muted);margin-left:auto">計画 ${qty}個</span>
+          <span style="font-size:12px;font-weight:700;color:${pctColor}">${pct}%</span>
         </div>
         <div class="post-adj-row">
           <button class="post-adj-btn" onclick="adjustPost('${r.plan.id}',-1)">－</button>
           <input class="post-num-input" type="number" id="post-inp-${r.plan.id}"
             value="${val}" min="0"
-            style="color:${valColor}"
+            style="color:${valColor};flex:1;width:auto"
             onchange="setPost('${r.plan.id}',this.value)">
           <button class="post-adj-btn" onclick="adjustPost('${r.plan.id}',1)">＋</button>
         </div>
       </div>`;
     });
+  });
+  // マスターにない品目（念のため末尾に）
+  rows.filter(r => !st.itemMaster.find(it => it.id === r.item.id)).forEach(r => {
+    const val = dn ? toNum((st.progress[r.plan.id]?.postDone||{})[dn]) : 0;
+    const qty = toNum(r.plan.qty);
+    const pct = qty > 0 ? Math.min(100, Math.round(val / qty * 100)) : 0;
+    const valColor = pct >= 100 ? 'var(--g)' : pct >= 50 ? 'var(--b)' : 'var(--text)';
+    const pctColor = pct >= 100 ? 'var(--g)' : pct >= 50 ? 'var(--b)' : 'var(--muted)';
+    inputHtml += `<div class="post-input-item">
+      <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+        <span style="font-size:13px;font-weight:700;color:var(--text)">${esc(r.item.name)}</span>
+        <span style="font-size:12px;color:var(--muted)">${esc(r.item.color)}</span>
+        <span style="font-size:11px;color:var(--muted);margin-left:auto">計画 ${qty}個</span>
+        <span style="font-size:12px;font-weight:700;color:${pctColor}">${pct}%</span>
+      </div>
+      <div class="post-adj-row">
+        <button class="post-adj-btn" onclick="adjustPost('${r.plan.id}',-1)">－</button>
+        <input class="post-num-input" type="number" id="post-inp-${r.plan.id}"
+          value="${val}" min="0"
+          style="color:${valColor};flex:1;width:auto"
+          onchange="setPost('${r.plan.id}',this.value)">
+        <button class="post-adj-btn" onclick="adjustPost('${r.plan.id}',1)">＋</button>
+      </div>
+    </div>`;
   });
   inputList.innerHTML = inputHtml || '<div class="text-muted f12" style="padding:8px">計画なし</div>';
 }
