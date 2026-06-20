@@ -908,6 +908,9 @@ function setPost(planId, val) {
 // ============================================================
 function onPlanItemChange() {}
 
+// 計画タブ: アコーディオン開閉状態（品目名 → true=開, false=閉）
+const _planGroupOpen = {};
+
 function renderPlanList() {
   const el = document.getElementById('plan-list');
   const sel = document.getElementById('plan-item-sel');
@@ -924,13 +927,6 @@ function renderPlanList() {
   });
   if (curVal) sel.value = curVal;
 
-  // 計画リスト
-  const sorted = [...st.plans].sort((a,b) => {
-    if (a.priority && !b.priority) return -1;
-    if (!a.priority && b.priority) return 1;
-    return a.date.localeCompare(b.date);
-  });
-
   // 完了済みバーの表示制御
   const completedIds = st.plans.filter(p => {
     const prog = st.progress[p.id] || {};
@@ -940,32 +936,111 @@ function renderPlanList() {
   const bulkBar = document.getElementById('plan-bulk-bar');
   if (bulkBar) bulkBar.style.display = completedIds.length > 0 ? '' : 'none';
 
-  el.innerHTML = sorted.map(p => {
+  if (!st.plans.length) {
+    el.innerHTML = '<div class="text-muted f13" style="padding:12px">計画がありません</div>';
+    return;
+  }
+
+  // 品目マスター登録順でグループ化
+  const groupMap = {};
+  const groupOrder = [];
+  st.itemMaster.forEach(it => {
+    if (!groupMap[it.name]) { groupMap[it.name] = []; groupOrder.push(it.name); }
+  });
+  // マスターにない品目は末尾に
+  st.plans.forEach(p => {
     const item = st.itemMaster.find(it => it.id === p.itemId);
-    const name = item ? `${item.name} ${item.color}` : p.itemId;
-    const prog = st.progress[p.id] || {};
-    const preDone = toNum(prog.preDone);
-    const postTotal = Object.values(prog.postDone||{}).reduce((s,v)=>s+toNum(v),0);
-    const qty = toNum(p.qty);
-    const isDone = qty > 0 && postTotal >= qty;
-    const doneStyle = isDone ? 'opacity:0.5;' : '';
-    const doneBadge = isDone ? '<span style="padding:2px 6px;border-radius:4px;font-size:11px;font-weight:700;background:#1e293b;color:#64748b;flex-shrink:0">✓完了</span>' : '';
-    return `<div class="plan-row" style="${doneStyle}">
-      ${p.priority ? '<span class="priority-badge">優先</span>' : ''}
-      ${doneBadge}
-      <div style="flex:2;min-width:0">
-        <div class="bold f13">${esc(name)}</div>
-        <div class="f12 text-muted">${fmtDate(p.date)}　${qty}個${p.memo ? '　'+esc(p.memo) : ''}</div>
-        <div class="f12" style="margin-top:2px">
-          前: <span class="text-b">${preDone}</span>　
-          後: <span class="text-g">${postTotal}</span>
-        </div>
+    const name = item ? item.name : '不明';
+    if (!groupMap[name]) { groupMap[name] = []; groupOrder.push(name); }
+    groupMap[name].push(p);
+  });
+
+  let html = '';
+  groupOrder.forEach(groupName => {
+    const plans = groupMap[groupName];
+    if (!plans || !plans.length) return;
+
+    // グループ内を優先→納期順にソート
+    const sorted = [...plans].sort((a,b) => {
+      if (a.priority && !b.priority) return -1;
+      if (!a.priority && b.priority) return 1;
+      return a.date.localeCompare(b.date);
+    });
+
+    // グループ完了判定（全planが完了）
+    const isGroupDone = sorted.every(p => {
+      const prog = st.progress[p.id] || {};
+      const postTotal = Object.values(prog.postDone||{}).reduce((s,v)=>s+toNum(v),0);
+      return toNum(p.qty) > 0 && postTotal >= toNum(p.qty);
+    });
+
+    // グループ合計数量・後工程合計
+    const groupTotalQty = sorted.reduce((s,p) => s + toNum(p.qty), 0);
+    const groupPostTotal = sorted.reduce((s,p) => {
+      const prog = st.progress[p.id] || {};
+      return s + Object.values(prog.postDone||{}).reduce((ss,v)=>ss+toNum(v),0);
+    }, 0);
+
+    // 開閉状態: 初回は完了グループを閉じる
+    if (_planGroupOpen[groupName] === undefined) {
+      _planGroupOpen[groupName] = !isGroupDone;
+    }
+    const isOpen = _planGroupOpen[groupName];
+
+    const doneBadge = isGroupDone
+      ? '<span style="padding:2px 6px;border-radius:4px;font-size:11px;font-weight:700;background:#1e293b;color:#64748b;margin-left:6px">✓完了</span>'
+      : '';
+    const chevron = isOpen ? '▼' : '▶';
+    const headerOpacity = isGroupDone ? 'opacity:0.6;' : '';
+
+    html += `<div style="margin-bottom:8px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
+      <div onclick="togglePlanGroup('${esc(groupName)}')"
+        style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:#131c2e;cursor:pointer;${headerOpacity}">
+        <span style="font-size:11px;color:var(--muted);flex-shrink:0">${chevron}</span>
+        <span style="font-size:15px;font-weight:700;flex:1">${esc(groupName)}${doneBadge}</span>
+        <span style="font-size:12px;color:var(--muted)">合計 ${groupTotalQty}個</span>
+        <span style="font-size:12px;color:var(--g);margin-left:8px">後工程 ${groupPostTotal}個</span>
       </div>
-      <button class="btn-sm" onclick="togglePriority('${p.id}')">${p.priority ? '⭐':'☆'}</button>
-      <button class="btn-sm" onclick="openEditPlan('${p.id}')" title="編集">✏️</button>
-      <button class="btn-sm btn-danger" onclick="askDeletePlan('${p.id}')">🗑</button>
+      <div id="plangroup-${esc(groupName.replace(/\s/g,'_'))}" style="display:${isOpen?'block':'none'}">
+        ${sorted.map(p => {
+          const item = st.itemMaster.find(it => it.id === p.itemId);
+          const colorLabel = item ? item.color : p.itemId;
+          const prog = st.progress[p.id] || {};
+          const preDone = toNum(prog.preDone);
+          const postTotal = Object.values(prog.postDone||{}).reduce((s,v)=>s+toNum(v),0);
+          const qty = toNum(p.qty);
+          const isDone = qty > 0 && postTotal >= qty;
+          const doneStyle = isDone ? 'opacity:0.5;' : '';
+          const donePlanBadge = isDone ? '<span style="padding:2px 6px;border-radius:4px;font-size:11px;font-weight:700;background:#1e293b;color:#64748b;flex-shrink:0">✓完了</span>' : '';
+          return `<div class="plan-row" style="${doneStyle}border-radius:0;border-left:none;border-right:none;border-bottom:none">
+            ${p.priority ? '<span class="priority-badge">優先</span>' : ''}
+            ${donePlanBadge}
+            <div style="flex:2;min-width:0">
+              <div class="bold f13">${esc(colorLabel)}</div>
+              <div class="f12 text-muted">${fmtDate(p.date)}　${qty}個${p.memo ? '　'+esc(p.memo) : ''}</div>
+              <div class="f12" style="margin-top:2px">
+                前: <span class="text-b">${preDone}</span>　後: <span class="text-g">${postTotal}</span>
+              </div>
+            </div>
+            <button class="btn-sm" onclick="togglePriority('${p.id}')">${p.priority ? '⭐':'☆'}</button>
+            <button class="btn-sm" onclick="openEditPlan('${p.id}')" title="編集">✏️</button>
+            <button class="btn-sm btn-danger" onclick="askDeletePlan('${p.id}')">🗑</button>
+          </div>`;
+        }).join('')}
+      </div>
     </div>`;
-  }).join('') || '<div class="text-muted f13" style="padding:12px">計画がありません</div>';
+  });
+
+  el.innerHTML = html;
+}
+
+function togglePlanGroup(groupName) {
+  _planGroupOpen[groupName] = !_planGroupOpen[groupName];
+  const key = 'plangroup-' + groupName.replace(/\s/g,'_');
+  const el = document.getElementById(key);
+  if (el) el.style.display = _planGroupOpen[groupName] ? 'block' : 'none';
+  // ヘッダーのシェブロンも更新
+  renderPlanList();
 }
 
 function addPlan() {
