@@ -26,7 +26,8 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 .panel{display:none;padding:12px 8px;min-height:calc(100vh - 90px)}
 .panel.active{display:block}
 /* アラートバー */
-#alert-bar{padding:10px 14px;margin:0 0 10px;border-radius:8px;font-size:13px;font-weight:600;text-align:center}
+#alert-bar{padding:10px 14px;margin:0 0 10px;border-radius:8px;font-size:13px;font-weight:600;text-align:center;line-height:1.6}
+#alert-bar span{font-weight:400;font-size:12px}
 .alert-ok{background:#052e16;color:var(--g);border:1px solid var(--g2)}
 .alert-ng{background:#450a0a;color:#fca5a5;border:1px solid var(--r2);animation:blink 1.2s infinite}
 .alert-gray{background:#1e293b;color:var(--muted);border:1px solid var(--border)}
@@ -703,7 +704,24 @@ function renderAlertBar(groups) {
   const bar = document.getElementById('alert-bar');
   if (!bar) return;
 
-  // 残り必要工数（分）合計
+  if (!groups.length) {
+    bar.className = 'alert-gray';
+    bar.innerHTML = '暫定モード: 計画を登録してください';
+    return;
+  }
+
+  // サイクル全体の必要工数（分）
+  let totalNeedMin = 0;
+  groups.forEach(g => {
+    g.plans.forEach(p => {
+      const item = st.itemMaster.find(it => it.id === p.itemId);
+      if (!item) return;
+      totalNeedMin += toNum(p.qty) * toNum(item.prePh);
+      totalNeedMin += toNum(p.qty) * toNum(item.postPh);
+    });
+  });
+
+  // 残り必要工数（分）
   let totalRemMin = 0;
   groups.forEach(g => {
     g.plans.forEach(p => {
@@ -717,28 +735,31 @@ function renderAlertBar(groups) {
     });
   });
 
-  if (!groups.length) {
-    bar.className = 'alert-gray';
-    bar.textContent = '暫定モード: 計画を登録してください';
-    return;
-  }
-
   const cap = calcCycleCapacityRealtime();
-  const remH = totalRemMin / 60;
+  const needH = totalNeedMin / 60;
+  const remH  = totalRemMin  / 60;
+  // 経過時間 = サイクル全体必要 - 残り必要
+  const elapsedH = Math.max(0, needH - remH);
 
   if (!cap.totalHours) {
     bar.className = 'alert-gray';
-    bar.textContent = `残り必要工数: ${fmtH(remH)} ／ 稼働未登録（⑤シフト・④勤怠で設定）`;
+    bar.innerHTML =
+      `稼働未登録（⑤シフト・④勤怠で設定）` +
+      `　<span style="opacity:.7">｜ 必要稼働 ${fmtH(needH)}　経過 ${fmtH(elapsedH)}　残 ${fmtH(remH)}</span>`;
     return;
   }
 
   const diff = cap.totalHours - remH;
   if (diff >= 0) {
     bar.className = 'alert-ok';
-    bar.textContent = `✅ 余裕: ${fmtH(diff)} ／ 残必要 ${fmtH(remH)} ／ 残稼働 ${fmtH(cap.totalHours)}`;
+    bar.innerHTML =
+      `✅ 余裕 ${fmtH(diff)}` +
+      `　<span style="opacity:.8">｜ 必要稼働 ${fmtH(needH)}　経過 ${fmtH(elapsedH)}　必要残 ${fmtH(remH)}</span>`;
   } else {
     bar.className = 'alert-ng';
-    bar.textContent = `⚠️ 不足: ${fmtH(-diff)} ／ 残必要 ${fmtH(remH)} ／ 残稼働 ${fmtH(cap.totalHours)}`;
+    bar.innerHTML =
+      `⚠️ 不足 ${fmtH(-diff)}` +
+      `　<span style="opacity:.9">｜ 必要稼働 ${fmtH(needH)}　経過 ${fmtH(elapsedH)}　必要残 ${fmtH(remH)}</span>`;
   }
 }
 
