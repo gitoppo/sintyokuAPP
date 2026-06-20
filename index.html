@@ -511,7 +511,8 @@ function getCurrentCycle() {
     if (isWorkday(day)) days.push(day);
   }
   const todayIdx = days.indexOf(today);
-  const remainDays = todayIdx >= 0 ? days.slice(todayIdx) : days;
+  // 今日が稼働日ならその日以降、休日なら今日より後の稼働日のみ残り日とする
+  const remainDays = todayIdx >= 0 ? days.slice(todayIdx) : days.filter(d => d > today);
   return { cycleStart: tue, days, remainDays };
 }
 
