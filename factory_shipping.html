@@ -405,12 +405,26 @@ function planRemaining(itemId){
   const plans = (st.plans||[]).filter(p=>p.itemId==itemId);
   if(plans.length===0) return null;
   let planTotal = plans.reduce((s,p)=>s+(parseInt(p.qty)||0),0);
-  let doneTotal = plans.reduce((s,p)=>{
-    const prog = (st.progress||{})[p.id];
-    if(!prog) return s;
-    const postTotal = Object.values(prog.postDone||{}).reduce((a,v)=>a+(parseInt(v)||0),0);
-    return s + postTotal;
-  },0);
+  let doneTotal = 0;
+  plans.forEach(p=>{
+    // progressはGASから {planId: {preDone, postDone}} の形で来る
+    // st.progressはオブジェクト or 配列どちらの場合も対応
+    let prog = null;
+    if(Array.isArray(st.progress)){
+      // 配列形式: [{planId, preDone, postDone}]
+      const row = st.progress.find(r=>r.planId==p.id);
+      if(row){
+        try{ prog = { postDone: JSON.parse(row.postDone||'{}') }; }catch(e){}
+      }
+    } else {
+      // オブジェクト形式: {planId: {preDone, postDone}}
+      prog = (st.progress||{})[p.id];
+    }
+    if(!prog) return;
+    const postDone = prog.postDone || {};
+    const postTotal = Object.values(postDone).reduce((a,v)=>a+(parseInt(v)||0),0);
+    doneTotal += postTotal;
+  });
   return planTotal - doneTotal;
 }
 
@@ -427,7 +441,7 @@ function itemOptions(selectedId, enteredQty){
 
 // 数量警告テキストを返す
 function qtyWarning(itemId, qty){
-  if(!itemId) return '';
+  if(!itemId || itemId==='') return ''; // 未選択は何も表示しない
   const rem = planRemaining(itemId);
   if(rem === null) return '<span style="color:#e94560;font-size:13px;font-weight:bold;">⚠ 計画外品目</span>';
   if(qty && parseInt(qty) > rem) return `<span style="color:#e94560;font-size:13px;font-weight:bold;">⚠ 残数超過（残${rem}）</span>`;
