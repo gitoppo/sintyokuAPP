@@ -101,13 +101,14 @@ tr:nth-child(even) td{background:#f9f9f9;}
     height:8mm;
     display:flex;
     align-items:center;
+    justify-content:space-between;
     box-sizing:border-box;
     flex-shrink:0;
-    padding:0 10mm;
   }
   .slip-divider-line{
-    flex:1;
+    width:10mm;
     border-top:1px dashed #000;
+    flex:none;
   }
   .slip-divider-label{
     display:none;
@@ -152,9 +153,9 @@ tr:nth-child(even) td{background:#f9f9f9;}
     align-items:center;
     box-sizing:border-box;
   }
-  .checklist-divider-line{flex:1;border-top:1px dashed #000;}
+  .checklist-divider-line{width:10mm;border-top:1px dashed #000;flex:none;}
   .checklist-divider-label{display:none;}
-  .checklist-divider{padding:0 10mm;}
+  .checklist-divider{width:100%;display:flex;justify-content:space-between;align-items:center;height:8mm;box-sizing:border-box;}
 
   /* 改ページ制御 */
   .checklist-page-break{page-break-after:always;}
