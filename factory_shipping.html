@@ -537,6 +537,7 @@ function addPallet(){
   saveLocalState();
   renderPallets();
   renderMaterial();
+  saveShippingWork();
 }
 
 function removePallet(idx){
@@ -545,12 +546,14 @@ function removePallet(idx){
   saveLocalState();
   renderPallets();
   renderMaterial();
+  saveShippingWork();
 }
 
 function addPalletRow(idx){
   st.pallets[idx].rows.push({itemId:'',qty:''});
   saveLocalState();
   renderPallets();
+  saveShippingWork();
 }
 
 function removePalletRow(pIdx,rIdx){
@@ -559,6 +562,7 @@ function removePalletRow(pIdx,rIdx){
   saveLocalState();
   renderPallets();
   renderMaterial();
+  saveShippingWork();
 }
 
 function onPalletChange(pIdx,rIdx,field,val){
@@ -609,6 +613,7 @@ function removeBaraRow(idx){
   saveLocalState();
   renderBara();
   renderMaterial();
+  saveShippingWork();
 }
 
 function onBaraChange(idx,field,val){
