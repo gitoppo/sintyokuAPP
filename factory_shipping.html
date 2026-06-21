@@ -115,6 +115,12 @@ tr:nth-child(even) td{background:#f9f9f9;}
   .checklist-table th,.checklist-table td{border:1px solid #000;padding:3mm 2mm;}
   .checklist-table th{background:#eee;}
   .checklist-check{width:10mm;text-align:center;}
+
+  /* 改ページ制御 */
+  .slip-page{width:100%;}
+  .slip-page-break{page-break-after:always;}
+  .checklist-page-break{page-break-after:always;}
+  .delivery-slip-empty{height:85mm;}
 }
 @media screen{
   #printArea{display:none;}
@@ -563,18 +569,8 @@ function renderMaterial(){
 }
 
 // ===== 印刷：納品書 =====
-function openPrintDelivery(){
-  // 全品目を収集
-  const allRows = collectAllRows();
-  if(allRows.length === 0){ toast('品目を登録してください'); return; }
-
-  // 8品目ごとに分割してチェックボックス選択UIを表示
-  if(allRows.length <= 8){
-    printDelivery(allRows);
-  } else {
-    showDeliverySplitUI(allRows);
-  }
-}
+// パレット＋バラの全品目をグループ単位に集計し、グループごとに納品書1枚生成
+// A4用紙1枚に3枚ずつ並べて印刷（3枚ごとに改ページ）
 
 function collectAllRows(){
   const rows = [];
@@ -582,80 +578,82 @@ function collectAllRows(){
     p.rows.forEach(r=>{
       if(r.itemId && r.qty){
         const item = st.itemMaster.find(m=>m.id==r.itemId);
-        if(item) rows.push({label:`パレット${pi+1}`, item, qty:parseInt(r.qty)||0});
+        if(item) rows.push({item, qty:parseInt(r.qty)||0});
       }
     });
   });
   st.bara.forEach(r=>{
     if(r.itemId && r.qty){
       const item = st.itemMaster.find(m=>m.id==r.itemId);
-      if(item) rows.push({label:'バラ', item, qty:parseInt(r.qty)||0});
+      if(item) rows.push({item, qty:parseInt(r.qty)||0});
     }
   });
   return rows;
 }
 
-function showDeliverySplitUI(allRows){
-  const overlay = document.createElement('div');
-  overlay.id = 'splitOverlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9990;display:flex;align-items:center;justify-content:center;';
-  overlay.innerHTML = `
-    <div style="background:#fff;border-radius:8px;padding:20px;max-width:400px;width:90%;max-height:80vh;overflow-y:auto;">
-      <div style="font-weight:bold;margin-bottom:12px;">印刷する品目を選択（最大8品目）</div>
-      ${allRows.map((r,i)=>`
-        <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:13px;">
-          <input type="checkbox" id="splitChk_${i}" checked>
-          ${esc(r.label)} / ${esc(r.item.name)} × ${r.qty}
-        </label>
-      `).join('')}
-      <div style="display:flex;gap:8px;margin-top:12px;">
-        <button class="btn-success" onclick="execSplitPrint(${JSON.stringify(allRows).replace(/"/g,'&quot;')})">印刷</button>
-        <button class="btn-gray" onclick="document.getElementById('splitOverlay').remove()">キャンセル</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
+// 全行をグループ別に集計（同品目は数量合算）
+function groupRowsByGroup(allRows){
+  const groupMap = {}; // groupName -> [{item, qty}]
+  allRows.forEach(r=>{
+    const g = r.item.group || '未分類';
+    if(!groupMap[g]) groupMap[g] = {};
+    const key = r.item.id;
+    if(!groupMap[g][key]) groupMap[g][key] = {item:r.item, qty:0};
+    groupMap[g][key].qty += r.qty;
+  });
+  // グループごとの行配列に変換
+  const result = [];
+  Object.entries(groupMap).forEach(([groupName, itemMap])=>{
+    result.push({groupName, rows: Object.values(itemMap)});
+  });
+  return result;
 }
 
-function execSplitPrint(allRows){
-  const selected = allRows.filter((_,i)=>document.getElementById(`splitChk_${i}`)?.checked);
-  document.getElementById('splitOverlay')?.remove();
-  if(selected.length === 0){ toast('品目を選択してください'); return; }
-  if(selected.length > 8){ toast('8品目以内で選択してください'); return; }
-  printDelivery(selected);
+function openPrintDelivery(){
+  const allRows = collectAllRows();
+  if(allRows.length === 0){ toast('品目を登録してください'); return; }
+  const grouped = groupRowsByGroup(allRows);
+  printDelivery(grouped);
 }
 
-function printDelivery(rows){
+function printDelivery(grouped){
   const date = document.getElementById('shippingDate').value || today();
   const deliveryNo = document.getElementById('deliveryNo').value.trim();
   const memo = document.getElementById('shippingMemo').value.trim();
 
-  // 単価情報は品目マスターにないため空欄（手入力想定）
-  // ※ 必要に応じて品目マスターに単価列を追加
-  let subtotal = 0;
-  rows.forEach(r=>{ subtotal += (r.item.price||0) * r.qty; });
-  const tax = Math.floor(subtotal * TAX_RATE);
-  const total = subtotal + tax;
+  // グループごとに納品書HTML生成
+  const slips = grouped.map((g, gi)=>{
+    const slipNo = deliveryNo ? deliveryNo + '-' + String(gi+1).padStart(2,'0') : String(gi+1);
+    let subtotal = 0;
+    g.rows.forEach(r=>{ subtotal += (r.item.price||0) * r.qty; });
+    const tax = Math.floor(subtotal * TAX_RATE);
+    const total = subtotal + tax;
+    return buildSlipHTML(g.rows, g.groupName, date, slipNo, memo, subtotal, tax, total);
+  });
 
-  const slipHTML = buildSlipHTML(rows, date, deliveryNo, memo, subtotal, tax, total);
-
-  // 3連分生成（1ページに3枚）
-  const printContent = `
-    <div style="width:100%;">
-      <div class="delivery-slip">${slipHTML}</div>
-      <hr class="slip-divider">
-      <div class="delivery-slip">${slipHTML}</div>
-      <hr class="slip-divider">
-      <div class="delivery-slip">${slipHTML}</div>
-    </div>
-  `;
+  // 3枚ずつA4用紙1枚に配置
+  let printContent = '';
+  for(let i=0; i<slips.length; i+=3){
+    const trio = slips.slice(i, i+3);
+    // 3枚に満たない場合は空スリップで埋める
+    while(trio.length < 3) trio.push('<div class="delivery-slip-empty"></div>');
+    const isLast = (i+3 >= slips.length);
+    printContent += `
+      <div class="slip-page${isLast ? '' : ' slip-page-break'}">
+        <div class="delivery-slip">${trio[0]}</div>
+        <hr class="slip-divider">
+        <div class="delivery-slip">${trio[1]}</div>
+        <hr class="slip-divider">
+        <div class="delivery-slip">${trio[2]}</div>
+      </div>`;
+  }
 
   document.getElementById('printArea').innerHTML = printContent;
-  saveDeliveryRecord(rows, date, deliveryNo, memo, 'delivery');
+  saveDeliveryRecord(collectAllRows(), date, deliveryNo, memo, 'delivery');
   window.print();
 }
 
-function buildSlipHTML(rows, date, deliveryNo, memo, subtotal, tax, total){
+function buildSlipHTML(rows, groupName, date, slipNo, memo, subtotal, tax, total){
   return `
     <div class="slip-title">納品書（受領書）</div>
     <div class="slip-info">
@@ -670,7 +668,7 @@ function buildSlipHTML(rows, date, deliveryNo, memo, subtotal, tax, total){
       </div>
     </div>
     <div style="font-size:9pt;margin-bottom:1mm;">
-      出荷日: ${date}　伝票No: ${deliveryNo||'—'}${memo?' 　備考: '+esc(memo):''}
+      出荷日: ${date}　伝票No: ${esc(slipNo)}　品目: ${esc(groupName)}${memo?' 　備考: '+esc(memo):''}
     </div>
     <table class="slip-table">
       <thead><tr><th>品目名</th><th>カラー</th><th>数量</th><th>単価</th><th>金額</th></tr></thead>
@@ -695,65 +693,74 @@ function buildSlipHTML(rows, date, deliveryNo, memo, subtotal, tax, total){
 }
 
 // ===== 印刷：チェックリスト =====
+// パレットごとに1枚、A4用紙に3パレット分ずつ並べて印刷
 function openPrintChecklist(){
-  const hasPallets = st.pallets.some(p=>p.rows.some(r=>r.itemId&&r.qty));
-  if(!hasPallets){ toast('品目を登録してください'); return; }
+  const validPallets = st.pallets.filter(p=>p.rows.some(r=>r.itemId&&r.qty));
+  if(validPallets.length === 0){ toast('品目を登録してください'); return; }
 
-  let html = `<div style="font-size:12pt;font-weight:bold;margin-bottom:4mm;">パレットチェックリスト</div>`;
-  html += `<div style="font-size:9pt;margin-bottom:4mm;">出荷日: ${document.getElementById('shippingDate').value||today()}　伝票No: ${document.getElementById('deliveryNo').value||'—'}</div>`;
+  const date = document.getElementById('shippingDate').value || today();
+  const deliveryNo = document.getElementById('deliveryNo').value.trim();
 
-  st.pallets.forEach((p,pi)=>{
+  // パレットごとのHTML生成
+  const palletBlocks = validPallets.map((p, pi)=>{
     const validRows = p.rows.filter(r=>r.itemId&&r.qty);
-    if(validRows.length===0) return;
-    html += `<div class="checklist-pallet">
-      <div class="checklist-title">📦 パレット ${pi+1}</div>
-      <table class="checklist-table">
-        <thead><tr><th class="checklist-check">✓</th><th>品目名</th><th>カラー</th><th style="width:60px;text-align:right;">数量</th></tr></thead>
-        <tbody>
-          ${validRows.map(r=>{
-            const item = st.itemMaster.find(m=>m.id==r.itemId);
-            if(!item) return '';
-            return `<tr>
-              <td class="checklist-check">□</td>
-              <td>${esc(item.name)}</td>
-              <td>${esc(item.color||'')}</td>
-              <td style="text-align:right;">${r.qty}</td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>
-    </div>`;
+    const palletNo = st.pallets.indexOf(p) + 1;
+    return `
+      <div class="checklist-pallet">
+        <div class="checklist-title">📦 パレット ${palletNo}</div>
+        <table class="checklist-table">
+          <thead><tr><th class="checklist-check">✓</th><th>品目名</th><th>カラー</th><th style="width:18mm;text-align:right;">数量</th></tr></thead>
+          <tbody>
+            ${validRows.map(r=>{
+              const item = st.itemMaster.find(m=>m.id==r.itemId);
+              if(!item) return '';
+              return `<tr>
+                <td class="checklist-check">□</td>
+                <td>${esc(item.name)}</td>
+                <td>${esc(item.color||'')}</td>
+                <td style="text-align:right;">${r.qty}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
   });
 
-  // バラ
+  // バラがあれば追加
   const validBara = st.bara.filter(r=>r.itemId&&r.qty);
   if(validBara.length > 0){
-    html += `<div class="checklist-pallet">
-      <div class="checklist-title">🚗 バラ（助手席/その他）</div>
-      <table class="checklist-table">
-        <thead><tr><th class="checklist-check">✓</th><th>品目名</th><th>カラー</th><th style="width:60px;text-align:right;">数量</th></tr></thead>
-        <tbody>
-          ${validBara.map(r=>{
-            const item = st.itemMaster.find(m=>m.id==r.itemId);
-            if(!item) return '';
-            return `<tr>
-              <td class="checklist-check">□</td>
-              <td>${esc(item.name)}</td>
-              <td>${esc(item.color||'')}</td>
-              <td style="text-align:right;">${r.qty}</td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>
-    </div>`;
+    palletBlocks.push(`
+      <div class="checklist-pallet">
+        <div class="checklist-title">🚗 バラ（助手席/その他）</div>
+        <table class="checklist-table">
+          <thead><tr><th class="checklist-check">✓</th><th>品目名</th><th>カラー</th><th style="width:18mm;text-align:right;">数量</th></tr></thead>
+          <tbody>
+            ${validBara.map(r=>{
+              const item = st.itemMaster.find(m=>m.id==r.itemId);
+              if(!item) return '';
+              return `<tr>
+                <td class="checklist-check">□</td>
+                <td>${esc(item.name)}</td>
+                <td>${esc(item.color||'')}</td>
+                <td style="text-align:right;">${r.qty}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`);
   }
 
-  document.getElementById('printArea').innerHTML = html;
-  saveDeliveryRecord(collectAllRows(),
-    document.getElementById('shippingDate').value||today(),
-    document.getElementById('deliveryNo').value.trim(),
-    document.getElementById('shippingMemo').value.trim(),
-    'checklist');
+  // 3パレットずつA4用紙1枚に配置
+  let printContent = `<div style="font-size:9pt;margin-bottom:4mm;">出荷日: ${date}　伝票No: ${deliveryNo||'—'}</div>`;
+  for(let i=0; i<palletBlocks.length; i+=3){
+    const trio = palletBlocks.slice(i, i+3);
+    const isLast = (i+3 >= palletBlocks.length);
+    printContent += `<div class="${isLast ? '' : 'checklist-page-break'}">${trio.join('')}</div>`;
+  }
+
+  document.getElementById('printArea').innerHTML = printContent;
+  saveDeliveryRecord(collectAllRows(), date, deliveryNo,
+    document.getElementById('shippingMemo').value.trim(), 'checklist');
   window.print();
 }
 
