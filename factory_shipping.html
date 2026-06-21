@@ -240,6 +240,8 @@ const TAX_RATE = 0.10;
 // ===== 状態 =====
 let st = {
   itemMaster: [],      // GASから取得
+  plans: [],           // GASから取得
+  progress: {},        // GASから取得
   pallets: [],         // [{id, rows:[{itemId,qty}]}]
   bara: [],            // [{itemId,qty}]
   deliveryHistory: []  // 発行済み出荷履歴
@@ -303,6 +305,8 @@ function saveSettings(){
 function saveLocalState(){
   const save = {
     itemMaster: st.itemMaster,
+    plans: st.plans,
+    progress: st.progress,
     pallets: st.pallets,
     bara: st.bara,
     deliveryHistory: st.deliveryHistory
@@ -315,8 +319,10 @@ function loadLocalState(){
   if(s){
     const d = JSON.parse(s);
     st.itemMaster = d.itemMaster || [];
-    st.pallets = d.pallets || [];
-    st.bara    = d.bara    || [];
+    st.plans      = d.plans      || [];
+    st.progress   = d.progress   || {};
+    st.pallets    = d.pallets    || [];
+    st.bara       = d.bara       || [];
     st.deliveryHistory = d.deliveryHistory || [];
   }
   // パレットが空なら1つ追加
@@ -354,6 +360,8 @@ async function loadFromGas(){
   try{
     const data = await gasGet('getAll');
     if(data && data.itemMaster) st.itemMaster = data.itemMaster;
+    if(data && data.plans)      st.plans      = data.plans;
+    if(data && data.progress)   st.progress   = data.progress;
     // 出荷履歴もGASから取得
     const shData = await gasGet('getShipping');
     if(shData && shData.deliveryHistory){
@@ -383,6 +391,46 @@ async function pingGas(){
     toast(d ? '接続OK' : '応答なし');
   }catch(e){ toast('接続失敗: '+e.message); }
   finally{ showLoading(false); }
+}
+
+// ===== 計画品目ヘルパー =====
+// 計画に登録されている品目IDのセットを返す
+function plannedItemIds(){
+  return new Set((st.plans||[]).map(p=>p.itemId));
+}
+
+// 計画に基づく残数（計画数量 - 後工程合計）を返す（未登録は null）
+function planRemaining(itemId){
+  const plans = (st.plans||[]).filter(p=>p.itemId==itemId);
+  if(plans.length===0) return null;
+  let planTotal = plans.reduce((s,p)=>s+(parseInt(p.qty)||0),0);
+  let doneTotal = plans.reduce((s,p)=>{
+    const prog = (st.progress||{})[p.id];
+    if(!prog) return s;
+    const postTotal = Object.values(prog.postDone||{}).reduce((a,v)=>a+(parseInt(v)||0),0);
+    return s + postTotal;
+  },0);
+  return planTotal - doneTotal;
+}
+
+// 計画品目のみのオプションHTML（警告付き）
+function itemOptions(selectedId, enteredQty){
+  const ids = plannedItemIds();
+  const items = st.itemMaster.filter(m=>ids.has(m.id));
+  if(items.length===0){
+    // 計画品目なければ全品目表示
+    return st.itemMaster.map(m=>`<option value="${esc(m.id)}" ${m.id==selectedId?'selected':''}>${esc(m.name)}${m.color?' ('+esc(m.color)+')':''}</option>`).join('');
+  }
+  return items.map(m=>`<option value="${esc(m.id)}" ${m.id==selectedId?'selected':''}>${esc(m.name)}${m.color?' ('+esc(m.color)+')':''}</option>`).join('');
+}
+
+// 数量警告テキストを返す
+function qtyWarning(itemId, qty){
+  if(!itemId || !qty) return '';
+  const rem = planRemaining(itemId);
+  if(rem === null) return '<span style="color:#e94560;font-size:11px;">⚠計画外</span>';
+  if(qty > rem) return `<span style="color:#e94560;font-size:11px;">⚠残${rem}</span>`;
+  return `<span style="color:#888;font-size:11px;">残${rem}</span>`;
 }
 
 // ===== パレット管理 =====
@@ -434,15 +482,14 @@ function renderPallets(){
           <div class="palletRow">
             <select onchange="onPalletChange(${pi},${ri},'itemId',this.value)">
               <option value="">-- 品目を選択 --</option>
-              ${st.itemMaster.map(m=>`
-                <option value="${esc(m.id)}" ${m.id==r.itemId?'selected':''}>${esc(m.name)}${m.color?' ('+esc(m.color)+')':''}</option>
-              `).join('')}
+              ${itemOptions(r.itemId, r.qty)}
             </select>
             <input type="number" min="0" placeholder="数量" value="${r.qty||''}"
               onchange="onPalletChange(${pi},${ri},'qty',this.value)"
               oninput="onPalletChange(${pi},${ri},'qty',this.value)">
             <button class="btn-danger btn-sm" onclick="removePalletRow(${pi},${ri})">✕</button>
           </div>
+          <div style="text-align:right;margin-top:-4px;margin-bottom:4px;">${qtyWarning(r.itemId, r.qty)}</div>
         `).join('')}
         <button class="btn-gray btn-sm" onclick="addPalletRow(${pi})" style="margin-top:4px;">＋ 行追加</button>
       </div>
@@ -477,15 +524,14 @@ function renderBara(){
     <div class="palletRow">
       <select onchange="onBaraChange(${i},'itemId',this.value)">
         <option value="">-- 品目を選択 --</option>
-        ${st.itemMaster.map(m=>`
-          <option value="${esc(m.id)}" ${m.id==r.itemId?'selected':''}>${esc(m.name)}${m.color?' ('+esc(m.color)+')':''}</option>
-        `).join('')}
+        ${itemOptions(r.itemId, r.qty)}
       </select>
       <input type="number" min="0" placeholder="数量" value="${r.qty||''}"
         onchange="onBaraChange(${i},'qty',this.value)"
         oninput="onBaraChange(${i},'qty',this.value)">
       <button class="btn-danger btn-sm" onclick="removeBaraRow(${i})">✕</button>
     </div>
+    <div style="text-align:right;margin-top:-4px;margin-bottom:4px;">${qtyWarning(r.itemId, r.qty)}</div>
   `).join('');
   el.innerHTML += `<button class="btn-gray btn-sm" onclick="addBaraRow()" style="margin-top:4px;">＋ 行追加</button>`;
 }
