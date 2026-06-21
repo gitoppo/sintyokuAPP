@@ -444,7 +444,11 @@ function qtyWarning(itemId, qty){
   if(!itemId || itemId==='') return ''; // 未選択は何も表示しない
   const rem = planRemaining(itemId);
   if(rem === null) return '<span style="color:#e94560;font-size:13px;font-weight:bold;">⚠ 計画外品目</span>';
-  if(qty && parseInt(qty) > rem) return `<span style="color:#e94560;font-size:13px;font-weight:bold;">⚠ 残数超過（残${rem}）</span>`;
+  // 入力数量が残数を上回る場合のみ警告（残数0は正常・先行納品も考慮してrem<0のみ超過）
+  if(qty && rem >= 0 && parseInt(qty) > rem && rem < parseInt(qty))
+    return `<span style="color:#e94560;font-size:13px;font-weight:bold;">⚠ 残数超過（残${rem}）</span>`;
+  if(rem < 0)
+    return `<span style="color:#e94560;font-size:13px;font-weight:bold;">⚠ 既に超過（残${rem}）</span>`;
   return `<span style="color:#888;font-size:12px;">残数: ${rem}</span>`;
 }
 
