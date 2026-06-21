@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>事務用 出荷管理</title>
+<style>
+/* ===== リセット・基本 ===== */
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Noto Sans JP',sans-serif;font-size:14px;background:#f5f5f5;color:#333;}
+button{cursor:pointer;font-size:13px;border:none;border-radius:4px;padding:6px 12px;}
+input,select,textarea{font-size:13px;border:1px solid #ccc;border-radius:4px;padding:5px 8px;width:100%;}
+select{background:#fff;}
+textarea{resize:vertical;}
+
+/* ===== タブバー ===== */
+#tabBar{position:sticky;top:0;z-index:100;display:flex;background:#1a1a2e;border-bottom:2px solid #0f3460;}
+.tab{flex:1;padding:10px 4px;color:#aaa;text-align:center;font-size:12px;cursor:pointer;border:none;background:none;}
+.tab.active{color:#e94560;border-bottom:3px solid #e94560;font-weight:bold;}
+
+/* ===== タブコンテンツ ===== */
+.tabContent{display:none;padding:10px;}
+.tabContent.active{display:block;}
+
+/* ===== カード ===== */
+.card{background:#fff;border-radius:6px;padding:12px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.1);}
+.cardTitle{font-weight:bold;font-size:13px;margin-bottom:8px;color:#1a1a2e;border-bottom:1px solid #eee;padding-bottom:6px;}
+
+/* ===== ボタン色 ===== */
+.btn-primary{background:#0f3460;color:#fff;}
+.btn-primary:hover{background:#1a1a2e;}
+.btn-danger{background:#e94560;color:#fff;}
+.btn-danger:hover{background:#c73652;}
+.btn-success{background:#27ae60;color:#fff;}
+.btn-success:hover{background:#219a52;}
+.btn-gray{background:#999;color:#fff;}
+.btn-gray:hover{background:#777;}
+.btn-sm{padding:4px 8px;font-size:12px;}
+
+/* ===== パレット ===== */
+.palletBlock{border:1px solid #ddd;border-radius:6px;margin-bottom:10px;overflow:hidden;}
+.palletHeader{background:#e8f0fe;padding:8px 12px;display:flex;align-items:center;gap:8px;font-weight:bold;font-size:13px;}
+.palletHeader button{margin-left:auto;}
+.palletBody{padding:10px;}
+.palletRow{display:grid;grid-template-columns:1fr 80px 32px;gap:6px;align-items:center;margin-bottom:6px;}
+.palletRow select{width:100%;}
+
+.baraBlock{border:1px solid #f0c040;border-radius:6px;margin-bottom:10px;overflow:hidden;}
+.baraHeader{background:#fffbe6;padding:8px 12px;font-weight:bold;font-size:13px;}
+.baraBody{padding:10px;}
+
+/* ===== 使用材料テーブル ===== */
+table{width:100%;border-collapse:collapse;font-size:12px;}
+th{background:#1a1a2e;color:#fff;padding:6px 8px;text-align:left;}
+td{padding:6px 8px;border-bottom:1px solid #eee;}
+tr:nth-child(even) td{background:#f9f9f9;}
+.group-header td{background:#e8f0fe;font-weight:bold;font-size:11px;color:#555;}
+
+/* ===== 出荷履歴 ===== */
+.historyItem{border:1px solid #ddd;border-radius:6px;margin-bottom:8px;overflow:hidden;}
+.historyHead{background:#f0f0f0;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;font-size:12px;}
+.historyBody{padding:8px 12px;font-size:12px;display:none;}
+.historyBody.open{display:block;}
+
+/* ===== 設定 ===== */
+.settingRow{margin-bottom:10px;}
+.settingRow label{display:block;font-size:12px;color:#666;margin-bottom:4px;}
+
+/* ===== トースト ===== */
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;display:none;z-index:9999;}
+
+/* ===== ローディング ===== */
+#loading{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:9998;display:none;}
+#loading span{background:#fff;padding:16px 28px;border-radius:8px;font-size:14px;}
+
+/* ===== 印刷スタイル ===== */
+@media print{
+  @page{margin:10mm;size:A4 portrait;}
+  body{background:#fff;font-size:10.5pt;}
+  #tabBar,#toast,#loading,.no-print{display:none!important;}
+  .tabContent{display:block!important;padding:0;}
+  #printArea{display:block;}
+
+  /* 納品書 3連 */
+  .delivery-slip{
+    width:100%;
+    height:88mm; /* A4(277mm内余白)/3 ≒ 85mm、余裕込み */
+    border:1px solid #000;
+    padding:3mm;
+    page-break-inside:avoid;
+    display:flex;
+    flex-direction:column;
+    font-size:10.5pt;
+    overflow:hidden;
+  }
+  .slip-divider{
+    border:none;
+    border-top:1px dashed #000;
+    margin:0;
+    page-break-after:avoid;
+  }
+  .slip-title{font-size:12pt;font-weight:bold;text-align:center;margin-bottom:2mm;}
+  .slip-info{display:flex;justify-content:space-between;font-size:9pt;margin-bottom:1mm;}
+  .slip-table{width:100%;border-collapse:collapse;font-size:9pt;flex:1;}
+  .slip-table th,.slip-table td{border:1px solid #000;padding:1mm 2mm;}
+  .slip-table th{background:#eee;}
+  .slip-total{text-align:right;font-size:9pt;margin-top:1mm;}
+
+  /* チェックリスト */
+  .checklist-pallet{page-break-inside:avoid;margin-bottom:6mm;}
+  .checklist-title{font-size:12pt;font-weight:bold;margin-bottom:2mm;}
+  .checklist-table{width:100%;border-collapse:collapse;font-size:10pt;}
+  .checklist-table th,.checklist-table td{border:1px solid #000;padding:3mm 2mm;}
+  .checklist-table th{background:#eee;}
+  .checklist-check{width:10mm;text-align:center;}
+}
+@media screen{
+  #printArea{display:none;}
+}
+</style>
+</head>
+<body>
+
+<!-- タブバー -->
+<div id="tabBar">
+  <button class="tab active" onclick="showTab('tabPallet')">①パレット<br>＆印刷</button>
+  <button class="tab" onclick="showTab('tabMaterial')">②使用<br>材料</button>
+  <button class="tab" onclick="showTab('tabHistory')">③出荷<br>履歴</button>
+  <button class="tab" onclick="showTab('tabSettings')">⚙️<br>設定</button>
+</div>
+
+<!-- ①パレット＆印刷タブ -->
+<div id="tabPallet" class="tabContent active">
+
+  <!-- 出荷日・伝票番号 -->
+  <div class="card">
+    <div class="cardTitle">出荷情報</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <div>
+        <label style="font-size:12px;color:#666;">出荷日</label>
+        <input type="date" id="shippingDate">
+      </div>
+      <div>
+        <label style="font-size:12px;color:#666;">伝票番号</label>
+        <input type="text" id="deliveryNo" placeholder="例: D-2026-001">
+      </div>
+    </div>
+    <div style="margin-top:8px;">
+      <label style="font-size:12px;color:#666;">出荷メモ</label>
+      <textarea id="shippingMemo" rows="2" placeholder="小型パレット使用など"></textarea>
+    </div>
+  </div>
+
+  <!-- パレット一覧 -->
+  <div id="palletList"></div>
+
+  <!-- バラ出荷 -->
+  <div class="baraBlock">
+    <div class="baraHeader">🚗 バラ（助手席/その他）</div>
+    <div class="baraBody" id="baraBody">
+      <!-- JS生成 -->
+    </div>
+  </div>
+
+  <!-- ボタン群 -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+    <button class="btn-primary" onclick="addPallet()">＋ パレット追加</button>
+    <button class="btn-success" onclick="openPrintDelivery()">🖨 納品書印刷</button>
+    <button class="btn-gray" onclick="openPrintChecklist()">📋 チェックリスト印刷</button>
+  </div>
+
+</div>
+
+<!-- ②使用材料タブ -->
+<div id="tabMaterial" class="tabContent">
+  <div class="card">
+    <div class="cardTitle">使用材料一覧（原反幅 1220mm）</div>
+    <div id="materialTable"></div>
+  </div>
+</div>
+
+<!-- ③出荷履歴タブ -->
+<div id="tabHistory" class="tabContent">
+  <div class="card">
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <input type="text" id="historySearch" placeholder="伝票番号・日付で検索" oninput="renderHistory()">
+    </div>
+    <div id="historyList"></div>
+  </div>
+</div>
+
+<!-- ⚙️設定タブ -->
+<div id="tabSettings" class="tabContent">
+  <div class="card">
+    <div class="cardTitle">自社情報</div>
+    <div class="settingRow"><label>会社名</label><input type="text" id="companyName" placeholder="株式会社〇〇"></div>
+    <div class="settingRow"><label>住所</label><input type="text" id="companyAddr" placeholder="大阪府〇〇市..."></div>
+    <div class="settingRow"><label>電話番号</label><input type="text" id="companyTel" placeholder="06-XXXX-XXXX"></div>
+  </div>
+  <div class="card">
+    <div class="cardTitle">得意先情報</div>
+    <div class="settingRow"><label>得意先名</label><input type="text" id="clientName" placeholder="株式会社△△"></div>
+    <div class="settingRow"><label>得意先住所</label><input type="text" id="clientAddr" placeholder="東京都〇〇区..."></div>
+  </div>
+  <div class="card">
+    <div class="cardTitle">端末・接続</div>
+    <div class="settingRow"><label>端末名</label><input type="text" id="deviceName" placeholder="事務PC"></div>
+    <div class="settingRow"><label>GAS URL</label><input type="text" id="gasUrl" placeholder="https://script.google.com/..."></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn-primary" onclick="saveSettings()">💾 設定を保存</button>
+      <button class="btn-gray" onclick="pingGas()">🔗 接続確認</button>
+      <button class="btn-gray" onclick="loadFromGas()">🔄 データ再読み込み</button>
+    </div>
+  </div>
+</div>
+
+<!-- 印刷エリア（画面非表示・印刷時のみ表示） -->
+<div id="printArea"></div>
+
+<!-- トースト -->
+<div id="toast"></div>
+<!-- ローディング -->
+<div id="loading"><span>処理中...</span></div>
+
+<script>
+'use strict';
+
+// ===== 定数 =====
+const MATERIAL_WIDTH = 1220; // 原反幅(mm) 固定
+const TAX_RATE = 0.10;
+
+// ===== 状態 =====
+let st = {
+  itemMaster: [],      // GASから取得
+  pallets: [],         // [{id, rows:[{itemId,qty}]}]
+  bara: [],            // [{itemId,qty}]
+  deliveryHistory: []  // 発行済み出荷履歴
+};
+
+let settings = {
+  companyName:'', companyAddr:'', companyTel:'',
+  clientName:'', clientAddr:'',
+  deviceName:'', gasUrl:''
+};
+
+// ===== 初期化 =====
+window.addEventListener('DOMContentLoaded', () => {
+  loadSettings();
+  loadLocalState();
+  setDefaultDate();
+  renderPallets();
+  renderBara();
+  renderMaterial();
+  renderHistory();
+  // GAS URLがあれば自動読み込み
+  if(settings.gasUrl) loadFromGas();
+});
+
+function setDefaultDate(){
+  const d = document.getElementById('shippingDate');
+  if(!d.value) d.value = today();
+}
+
+function today(){
+  const d = new Date();
+  return d.toISOString().slice(0,10);
+}
+
+// ===== 設定 保存/読み込み =====
+function loadSettings(){
+  const s = localStorage.getItem('shippingSettings');
+  if(s){ Object.assign(settings, JSON.parse(s)); }
+  document.getElementById('companyName').value = settings.companyName||'';
+  document.getElementById('companyAddr').value = settings.companyAddr||'';
+  document.getElementById('companyTel').value  = settings.companyTel||'';
+  document.getElementById('clientName').value  = settings.clientName||'';
+  document.getElementById('clientAddr').value  = settings.clientAddr||'';
+  document.getElementById('deviceName').value  = settings.deviceName||'';
+  document.getElementById('gasUrl').value      = settings.gasUrl||'';
+}
+
+function saveSettings(){
+  settings.companyName = document.getElementById('companyName').value.trim();
+  settings.companyAddr = document.getElementById('companyAddr').value.trim();
+  settings.companyTel  = document.getElementById('companyTel').value.trim();
+  settings.clientName  = document.getElementById('clientName').value.trim();
+  settings.clientAddr  = document.getElementById('clientAddr').value.trim();
+  settings.deviceName  = document.getElementById('deviceName').value.trim();
+  settings.gasUrl      = document.getElementById('gasUrl').value.trim();
+  localStorage.setItem('shippingSettings', JSON.stringify(settings));
+  toast('設定を保存しました');
+}
+
+// ===== ローカル状態 保存/読み込み =====
+function saveLocalState(){
+  const save = {
+    pallets: st.pallets,
+    bara: st.bara,
+    deliveryHistory: st.deliveryHistory
+  };
+  localStorage.setItem('shippingState_v1', JSON.stringify(save));
+}
+
+function loadLocalState(){
+  const s = localStorage.getItem('shippingState_v1');
+  if(s){
+    const d = JSON.parse(s);
+    st.pallets = d.pallets || [];
+    st.bara    = d.bara    || [];
+    st.deliveryHistory = d.deliveryHistory || [];
+  }
+  // パレットが空なら1つ追加
+  if(st.pallets.length === 0) st.pallets.push(newPallet());
+  // バラが空なら1行追加
+  if(st.bara.length === 0) st.bara.push({itemId:'',qty:''});
+}
+
+function newPallet(){
+  return { id: Date.now() + Math.random(), rows:[{itemId:'',qty:''}] };
+}
+
+// ===== GAS 通信 =====
+async function gasGet(action){
+  const url = settings.gasUrl;
+  if(!url){ toast('GAS URLを設定してください'); return null; }
+  const res = await fetch(`${url}?action=${action}&v=${Date.now()}`,
+    {method:'GET', redirect:'follow', cache:'no-store'});
+  return res.json();
+}
+
+async function gasPost(payload){
+  const url = settings.gasUrl;
+  if(!url){ toast('GAS URLを設定してください'); return null; }
+  const res = await fetch(`${url}?v=${Date.now()}`, {
+    method:'POST', redirect:'follow', cache:'no-store',
+    headers:{'Content-Type':'text/plain;charset=UTF-8'},
+    body: JSON.stringify(payload)
+  });
+  return res.json();
+}
+
+async function loadFromGas(){
+  showLoading(true);
+  try{
+    const data = await gasGet('getAll');
+    if(data && data.itemMaster) st.itemMaster = data.itemMaster;
+    // 出荷履歴もGASから取得
+    const shData = await gasGet('getShipping');
+    if(shData && shData.deliveryHistory){
+      // GAS側のレコードをマージ（idで重複排除）
+      const existing = new Set(st.deliveryHistory.map(r=>r.id));
+      shData.deliveryHistory.forEach(r=>{
+        if(!existing.has(r.id)) st.deliveryHistory.push(r);
+      });
+      saveLocalState();
+    }
+    renderPallets();
+    renderBara();
+    renderMaterial();
+    renderHistory();
+    toast('データを読み込みました');
+  }catch(e){
+    toast('読み込みエラー: '+e.message);
+  }finally{
+    showLoading(false);
+  }
+}
+
+async function pingGas(){
+  showLoading(true);
+  try{
+    const d = await gasGet('ping');
+    toast(d ? '接続OK' : '応答なし');
+  }catch(e){ toast('接続失敗: '+e.message); }
+  finally{ showLoading(false); }
+}
+
+// ===== パレット管理 =====
+function addPallet(){
+  st.pallets.push(newPallet());
+  saveLocalState();
+  renderPallets();
+  renderMaterial();
+}
+
+function removePallet(idx){
+  if(st.pallets.length <= 1){ toast('パレットは最低1つ必要です'); return; }
+  st.pallets.splice(idx,1);
+  saveLocalState();
+  renderPallets();
+  renderMaterial();
+}
+
+function addPalletRow(idx){
+  st.pallets[idx].rows.push({itemId:'',qty:''});
+  saveLocalState();
+  renderPallets();
+}
+
+function removePalletRow(pIdx,rIdx){
+  if(st.pallets[pIdx].rows.length <= 1){ toast('行は最低1つ必要です'); return; }
+  st.pallets[pIdx].rows.splice(rIdx,1);
+  saveLocalState();
+  renderPallets();
+  renderMaterial();
+}
+
+function onPalletChange(pIdx,rIdx,field,val){
+  st.pallets[pIdx].rows[rIdx][field] = field==='qty' ? (parseInt(val)||'') : val;
+  saveLocalState();
+  renderMaterial();
+}
+
+function renderPallets(){
+  const el = document.getElementById('palletList');
+  el.innerHTML = st.pallets.map((p,pi)=>`
+    <div class="palletBlock">
+      <div class="palletHeader">
+        📦 パレット ${pi+1}
+        <button class="btn-danger btn-sm" onclick="removePallet(${pi})">✕ 削除</button>
+      </div>
+      <div class="palletBody">
+        ${p.rows.map((r,ri)=>`
+          <div class="palletRow">
+            <select onchange="onPalletChange(${pi},${ri},'itemId',this.value)">
+              <option value="">-- 品目を選択 --</option>
+              ${st.itemMaster.map(m=>`
+                <option value="${esc(m.id)}" ${m.id==r.itemId?'selected':''}>${esc(m.name)}${m.color?' ('+esc(m.color)+')':''}</option>
+              `).join('')}
+            </select>
+            <input type="number" min="0" placeholder="数量" value="${r.qty||''}"
+              onchange="onPalletChange(${pi},${ri},'qty',this.value)"
+              oninput="onPalletChange(${pi},${ri},'qty',this.value)">
+            <button class="btn-danger btn-sm" onclick="removePalletRow(${pi},${ri})">✕</button>
+          </div>
+        `).join('')}
+        <button class="btn-gray btn-sm" onclick="addPalletRow(${pi})" style="margin-top:4px;">＋ 行追加</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ===== バラ管理 =====
+function addBaraRow(){
+  st.bara.push({itemId:'',qty:''});
+  saveLocalState();
+  renderBara();
+}
+
+function removeBaraRow(idx){
+  if(st.bara.length <= 1){ toast('行は最低1つ必要です'); return; }
+  st.bara.splice(idx,1);
+  saveLocalState();
+  renderBara();
+  renderMaterial();
+}
+
+function onBaraChange(idx,field,val){
+  st.bara[idx][field] = field==='qty' ? (parseInt(val)||'') : val;
+  saveLocalState();
+  renderMaterial();
+}
+
+function renderBara(){
+  const el = document.getElementById('baraBody');
+  el.innerHTML = st.bara.map((r,i)=>`
+    <div class="palletRow">
+      <select onchange="onBaraChange(${i},'itemId',this.value)">
+        <option value="">-- 品目を選択 --</option>
+        ${st.itemMaster.map(m=>`
+          <option value="${esc(m.id)}" ${m.id==r.itemId?'selected':''}>${esc(m.name)}${m.color?' ('+esc(m.color)+')':''}</option>
+        `).join('')}
+      </select>
+      <input type="number" min="0" placeholder="数量" value="${r.qty||''}"
+        onchange="onBaraChange(${i},'qty',this.value)"
+        oninput="onBaraChange(${i},'qty',this.value)">
+      <button class="btn-danger btn-sm" onclick="removeBaraRow(${i})">✕</button>
+    </div>
+  `).join('');
+  el.innerHTML += `<button class="btn-gray btn-sm" onclick="addBaraRow()" style="margin-top:4px;">＋ 行追加</button>`;
+}
+
+// ===== 使用材料計算 =====
+function calcMaterial(){
+  // パレット＋バラの全行を集計
+  const allRows = [];
+  st.pallets.forEach((p,pi)=>{
+    p.rows.forEach(r=>{
+      if(r.itemId && r.qty) allRows.push({itemId:r.itemId, qty:parseInt(r.qty)||0, src:`パレット${pi+1}`});
+    });
+  });
+  st.bara.forEach(r=>{
+    if(r.itemId && r.qty) allRows.push({itemId:r.itemId, qty:parseInt(r.qty)||0, src:'バラ'});
+  });
+
+  // 品目ごとに集計
+  const itemMap = {};
+  allRows.forEach(row=>{
+    if(!itemMap[row.itemId]) itemMap[row.itemId] = 0;
+    itemMap[row.itemId] += row.qty;
+  });
+
+  // 品目ごとの材料計算
+  const results = [];
+  Object.entries(itemMap).forEach(([itemId, totalQty])=>{
+    const item = st.itemMaster.find(m=>m.id==itemId);
+    if(!item) return;
+    const cutW = parseFloat(item.cutW)||0;
+    const cutL = parseFloat(item.cutL)||0;
+    const sheetNo = item.sheetNo||'';
+
+    let takiCount = 0, usedM = 0, note = '';
+    if(cutW > 0 && cutL > 0){
+      takiCount = Math.floor(MATERIAL_WIDTH / cutW);
+      if(takiCount < 1) takiCount = 1;
+      usedM = Math.ceil(totalQty / takiCount) * cutL / 1000;
+    } else {
+      note = '寸法未設定';
+    }
+    results.push({item, totalQty, sheetNo, cutW, cutL, takiCount, usedM, note});
+  });
+
+  // シート品番ごとにグループ化
+  const grouped = {};
+  results.forEach(r=>{
+    const key = r.sheetNo || '品番未設定';
+    if(!grouped[key]) grouped[key] = {rows:[], totalM:0};
+    grouped[key].rows.push(r);
+    grouped[key].totalM += r.usedM;
+  });
+
+  return grouped;
+}
+
+function renderMaterial(){
+  const el = document.getElementById('materialTable');
+  const grouped = calcMaterial();
+  const keys = Object.keys(grouped);
+  if(keys.length === 0){
+    el.innerHTML = '<p style="color:#999;font-size:12px;padding:8px;">パレットに品目を登録すると表示されます</p>';
+    return;
+  }
+
+  let html = '<table><thead><tr><th>品目名</th><th>数量</th><th>幅取り</th><th>使用長(m)</th></tr></thead><tbody>';
+  keys.forEach(key=>{
+    const g = grouped[key];
+    html += `<tr class="group-header"><td colspan="3">📄 ${esc(key)}</td><td>合計 ${g.totalM.toFixed(2)} m</td></tr>`;
+    g.rows.forEach(r=>{
+      html += `<tr>
+        <td>${esc(r.item.name)}${r.item.color?' <span style="color:#666;font-size:11px;">('+esc(r.item.color)+')</span>':''}</td>
+        <td style="text-align:right;">${r.totalQty}</td>
+        <td style="text-align:center;">${r.note || r.takiCount+'枚取'}</td>
+        <td style="text-align:right;">${r.note ? r.note : r.usedM.toFixed(2)+' m'}</td>
+      </tr>`;
+    });
+  });
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+// ===== 印刷：納品書 =====
+function openPrintDelivery(){
+  // 全品目を収集
+  const allRows = collectAllRows();
+  if(allRows.length === 0){ toast('品目を登録してください'); return; }
+
+  // 8品目ごとに分割してチェックボックス選択UIを表示
+  if(allRows.length <= 8){
+    printDelivery(allRows);
+  } else {
+    showDeliverySplitUI(allRows);
+  }
+}
+
+function collectAllRows(){
+  const rows = [];
+  st.pallets.forEach((p,pi)=>{
+    p.rows.forEach(r=>{
+      if(r.itemId && r.qty){
+        const item = st.itemMaster.find(m=>m.id==r.itemId);
+        if(item) rows.push({label:`パレット${pi+1}`, item, qty:parseInt(r.qty)||0});
+      }
+    });
+  });
+  st.bara.forEach(r=>{
+    if(r.itemId && r.qty){
+      const item = st.itemMaster.find(m=>m.id==r.itemId);
+      if(item) rows.push({label:'バラ', item, qty:parseInt(r.qty)||0});
+    }
+  });
+  return rows;
+}
+
+function showDeliverySplitUI(allRows){
+  const overlay = document.createElement('div');
+  overlay.id = 'splitOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9990;display:flex;align-items:center;justify-content:center;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:8px;padding:20px;max-width:400px;width:90%;max-height:80vh;overflow-y:auto;">
+      <div style="font-weight:bold;margin-bottom:12px;">印刷する品目を選択（最大8品目）</div>
+      ${allRows.map((r,i)=>`
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:13px;">
+          <input type="checkbox" id="splitChk_${i}" checked>
+          ${esc(r.label)} / ${esc(r.item.name)} × ${r.qty}
+        </label>
+      `).join('')}
+      <div style="display:flex;gap:8px;margin-top:12px;">
+        <button class="btn-success" onclick="execSplitPrint(${JSON.stringify(allRows).replace(/"/g,'&quot;')})">印刷</button>
+        <button class="btn-gray" onclick="document.getElementById('splitOverlay').remove()">キャンセル</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+function execSplitPrint(allRows){
+  const selected = allRows.filter((_,i)=>document.getElementById(`splitChk_${i}`)?.checked);
+  document.getElementById('splitOverlay')?.remove();
+  if(selected.length === 0){ toast('品目を選択してください'); return; }
+  if(selected.length > 8){ toast('8品目以内で選択してください'); return; }
+  printDelivery(selected);
+}
+
+function printDelivery(rows){
+  const date = document.getElementById('shippingDate').value || today();
+  const deliveryNo = document.getElementById('deliveryNo').value.trim();
+  const memo = document.getElementById('shippingMemo').value.trim();
+
+  // 単価情報は品目マスターにないため空欄（手入力想定）
+  // ※ 必要に応じて品目マスターに単価列を追加
+  let subtotal = 0;
+  rows.forEach(r=>{ subtotal += (r.item.price||0) * r.qty; });
+  const tax = Math.floor(subtotal * TAX_RATE);
+  const total = subtotal + tax;
+
+  const slipHTML = buildSlipHTML(rows, date, deliveryNo, memo, subtotal, tax, total);
+
+  // 3連分生成
+  const printContent = `
+    <div class="delivery-slip">${slipHTML}</div>
+    <hr class="slip-divider">
+    <div class="delivery-slip">${slipHTML}</div>
+    <hr class="slip-divider">
+    <div class="delivery-slip">${slipHTML}</div>
+  `;
+
+  document.getElementById('printArea').innerHTML = printContent;
+  saveDeliveryRecord(rows, date, deliveryNo, memo, 'delivery');
+  window.print();
+}
+
+function buildSlipHTML(rows, date, deliveryNo, memo, subtotal, tax, total){
+  return `
+    <div class="slip-title">納品書（受領書）</div>
+    <div class="slip-info">
+      <div>
+        <div><b>${esc(settings.clientName)||'得意先名'}</b> 御中</div>
+        <div style="font-size:8pt;">${esc(settings.clientAddr)||''}</div>
+      </div>
+      <div style="text-align:right;">
+        <div>${esc(settings.companyName)||'自社名'}</div>
+        <div style="font-size:8pt;">${esc(settings.companyAddr)||''}</div>
+        <div style="font-size:8pt;">TEL: ${esc(settings.companyTel)||''}</div>
+      </div>
+    </div>
+    <div style="font-size:9pt;margin-bottom:1mm;">
+      出荷日: ${date}　伝票No: ${deliveryNo||'—'}${memo?' 　備考: '+esc(memo):''}
+    </div>
+    <table class="slip-table">
+      <thead><tr><th>品目名</th><th>カラー</th><th>数量</th><th>単価</th><th>金額</th></tr></thead>
+      <tbody>
+        ${rows.map(r=>{
+          const price = r.item.price||0;
+          const amount = price * r.qty;
+          return `<tr>
+            <td>${esc(r.item.name)}</td>
+            <td>${esc(r.item.color||'')}</td>
+            <td style="text-align:right;">${r.qty}</td>
+            <td style="text-align:right;">${price?price.toLocaleString():''}</td>
+            <td style="text-align:right;">${amount?amount.toLocaleString():''}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    <div class="slip-total">
+      小計: ${subtotal.toLocaleString()}円　消費税(10%): ${tax.toLocaleString()}円　<b>税込合計: ${total.toLocaleString()}円</b>
+    </div>
+  `;
+}
+
+// ===== 印刷：チェックリスト =====
+function openPrintChecklist(){
+  const hasPallets = st.pallets.some(p=>p.rows.some(r=>r.itemId&&r.qty));
+  if(!hasPallets){ toast('品目を登録してください'); return; }
+
+  let html = `<div style="font-size:12pt;font-weight:bold;margin-bottom:4mm;">パレットチェックリスト</div>`;
+  html += `<div style="font-size:9pt;margin-bottom:4mm;">出荷日: ${document.getElementById('shippingDate').value||today()}　伝票No: ${document.getElementById('deliveryNo').value||'—'}</div>`;
+
+  st.pallets.forEach((p,pi)=>{
+    const validRows = p.rows.filter(r=>r.itemId&&r.qty);
+    if(validRows.length===0) return;
+    html += `<div class="checklist-pallet">
+      <div class="checklist-title">📦 パレット ${pi+1}</div>
+      <table class="checklist-table">
+        <thead><tr><th class="checklist-check">✓</th><th>品目名</th><th>カラー</th><th style="width:60px;text-align:right;">数量</th></tr></thead>
+        <tbody>
+          ${validRows.map(r=>{
+            const item = st.itemMaster.find(m=>m.id==r.itemId);
+            if(!item) return '';
+            return `<tr>
+              <td class="checklist-check">□</td>
+              <td>${esc(item.name)}</td>
+              <td>${esc(item.color||'')}</td>
+              <td style="text-align:right;">${r.qty}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  });
+
+  // バラ
+  const validBara = st.bara.filter(r=>r.itemId&&r.qty);
+  if(validBara.length > 0){
+    html += `<div class="checklist-pallet">
+      <div class="checklist-title">🚗 バラ（助手席/その他）</div>
+      <table class="checklist-table">
+        <thead><tr><th class="checklist-check">✓</th><th>品目名</th><th>カラー</th><th style="width:60px;text-align:right;">数量</th></tr></thead>
+        <tbody>
+          ${validBara.map(r=>{
+            const item = st.itemMaster.find(m=>m.id==r.itemId);
+            if(!item) return '';
+            return `<tr>
+              <td class="checklist-check">□</td>
+              <td>${esc(item.name)}</td>
+              <td>${esc(item.color||'')}</td>
+              <td style="text-align:right;">${r.qty}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  }
+
+  document.getElementById('printArea').innerHTML = html;
+  saveDeliveryRecord(collectAllRows(),
+    document.getElementById('shippingDate').value||today(),
+    document.getElementById('deliveryNo').value.trim(),
+    document.getElementById('shippingMemo').value.trim(),
+    'checklist');
+  window.print();
+}
+
+// ===== 出荷履歴 保存 =====
+async function saveDeliveryRecord(rows, date, deliveryNo, memo, type){
+  const record = {
+    id: 'dh_'+Date.now(),
+    timestamp: new Date().toISOString(),
+    deviceName: settings.deviceName||'',
+    deliveryNo: deliveryNo||'',
+    memo: memo||'',
+    shippingDate: date,
+    type: type,
+    palletsJson: JSON.stringify({pallets:st.pallets, bara:st.bara})
+  };
+  st.deliveryHistory.unshift(record);
+  saveLocalState();
+  renderHistory();
+  // GASへ送信
+  if(settings.gasUrl){
+    try{
+      await gasPost({action:'saveShipping', records:[record]});
+    }catch(e){ console.warn('GAS保存エラー',e); }
+  }
+}
+
+// ===== 出荷履歴 表示 =====
+function renderHistory(){
+  const el = document.getElementById('historyList');
+  const q = (document.getElementById('historySearch')?.value||'').trim().toLowerCase();
+  let list = st.deliveryHistory;
+  if(q) list = list.filter(r=>
+    (r.deliveryNo||'').toLowerCase().includes(q) ||
+    (r.shippingDate||'').includes(q)
+  );
+  if(list.length === 0){
+    el.innerHTML = '<p style="color:#999;font-size:12px;padding:8px;">履歴がありません</p>';
+    return;
+  }
+  el.innerHTML = list.map((r,i)=>`
+    <div class="historyItem">
+      <div class="historyHead" onclick="toggleHistory(${i})">
+        <span>${r.shippingDate||'—'} 伝票: ${r.deliveryNo||'—'}</span>
+        <span style="color:#666;">${r.type==='checklist'?'📋':'🖨'} ▼</span>
+      </div>
+      <div class="historyBody" id="hb_${i}">
+        <div>端末: ${esc(r.deviceName||'—')}　発行: ${r.timestamp?r.timestamp.slice(0,16).replace('T',' '):'—'}</div>
+        ${r.memo?`<div>メモ: ${esc(r.memo)}</div>`:''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function toggleHistory(i){
+  const el = document.getElementById('hb_'+i);
+  if(el) el.classList.toggle('open');
+}
+
+// ===== タブ切り替え =====
+function showTab(id){
+  document.querySelectorAll('.tabContent').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
+  document.getElementById(id)?.classList.add('active');
+  const idx = ['tabPallet','tabMaterial','tabHistory','tabSettings'].indexOf(id);
+  document.querySelectorAll('.tab')[idx]?.classList.add('active');
+  if(id==='tabMaterial') renderMaterial();
+  if(id==='tabHistory') renderHistory();
+}
+
+// ===== ユーティリティ =====
+function esc(s){
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function toast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.display = 'block';
+  clearTimeout(el._t);
+  el._t = setTimeout(()=>{ el.style.display='none'; }, 3500);
+}
+
+function showLoading(v){
+  document.getElementById('loading').style.display = v ? 'flex' : 'none';
+}
+</script>
+</body>
+</html>
