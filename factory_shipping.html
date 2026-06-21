@@ -85,14 +85,15 @@ tr:nth-child(even) td{background:#f9f9f9;}
   .delivery-slip{
     width:100%;
     height:85mm;
-    border:1px solid #000;
-    padding:3mm;
+    border:none;
+    padding:3mm 3mm 0 3mm;
     page-break-inside:avoid;
     display:flex;
     flex-direction:column;
     font-size:10.5pt;
     overflow:hidden;
     box-sizing:border-box;
+    justify-content:flex-start;
   }
   .slip-divider{
     border:none;
@@ -103,7 +104,7 @@ tr:nth-child(even) td{background:#f9f9f9;}
   }
   .slip-title{font-size:12pt;font-weight:bold;text-align:center;margin-bottom:2mm;}
   .slip-info{display:flex;justify-content:space-between;font-size:9pt;margin-bottom:1mm;}
-  .slip-table{width:100%;border-collapse:collapse;font-size:9pt;flex:1;}
+  .slip-table{width:100%;border-collapse:collapse;font-size:9pt;}
   .slip-table th,.slip-table td{border:1px solid #000;padding:1mm 2mm;}
   .slip-table th{background:#eee;}
   .slip-total{text-align:right;font-size:9pt;margin-top:1mm;}
@@ -426,11 +427,11 @@ function itemOptions(selectedId, enteredQty){
 
 // 数量警告テキストを返す
 function qtyWarning(itemId, qty){
-  if(!itemId || !qty) return '';
+  if(!itemId) return '';
   const rem = planRemaining(itemId);
-  if(rem === null) return '<span style="color:#e94560;font-size:11px;">⚠計画外</span>';
-  if(qty > rem) return `<span style="color:#e94560;font-size:11px;">⚠残${rem}</span>`;
-  return `<span style="color:#888;font-size:11px;">残${rem}</span>`;
+  if(rem === null) return '<span style="color:#e94560;font-size:13px;font-weight:bold;">⚠ 計画外品目</span>';
+  if(qty && parseInt(qty) > rem) return `<span style="color:#e94560;font-size:13px;font-weight:bold;">⚠ 残数超過（残${rem}）</span>`;
+  return `<span style="color:#888;font-size:12px;">残数: ${rem}</span>`;
 }
 
 // ===== パレット管理 =====
@@ -701,7 +702,7 @@ function printDelivery(grouped){
 
 function buildSlipHTML(rows, groupName, date, slipNo, memo, subtotal, tax, total){
   return `
-    <div class="slip-title">納品書（受領書）</div>
+    <div class="slip-title">納品書</div>
     <div class="slip-info">
       <div>
         <div><b>${esc(settings.clientName)||'得意先名'}</b> 御中</div>
