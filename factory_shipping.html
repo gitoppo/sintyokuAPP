@@ -264,7 +264,7 @@ window.addEventListener('DOMContentLoaded', () => {
   renderMaterial();
   renderHistory();
   // GAS URLがあれば自動読み込み
-  if(settings.gasUrl) loadFromGas();
+  if(settings.gasUrl){ loadFromGas(); startPolling(); }
 });
 
 function setDefaultDate(){
@@ -363,14 +363,27 @@ async function loadFromGas(){
     if(data && data.itemMaster) st.itemMaster = data.itemMaster;
     if(data && data.plans)      st.plans      = data.plans;
     if(data && data.progress)   st.progress   = data.progress;
-    // 出荷履歴もGASから取得
+    // 出荷履歴＋作業中データをGASから取得
     const shData = await gasGet('getShipping');
-    if(shData && shData.deliveryHistory){
-      // GAS側のレコードをマージ（idで重複排除）
-      const existing = new Set(st.deliveryHistory.map(r=>r.id));
-      shData.deliveryHistory.forEach(r=>{
-        if(!existing.has(r.id)) st.deliveryHistory.push(r);
-      });
+    if(shData){
+      // 履歴マージ（idで重複排除）
+      if(shData.deliveryHistory){
+        const existing = new Set(st.deliveryHistory.map(r=>r.id));
+        shData.deliveryHistory.forEach(r=>{
+          if(!existing.has(r.id)) st.deliveryHistory.push(r);
+        });
+      }
+      // 作業中パレットデータを取得（ローカルが空の場合のみ上書き）
+      if(shData.workData && st.pallets.every(p=>p.rows.every(r=>!r.itemId))){
+        if(shData.workData.pallets) st.pallets = shData.workData.pallets;
+        if(shData.workData.bara)    st.bara    = shData.workData.bara;
+        const dateEl = document.getElementById('shippingDate');
+        const noEl   = document.getElementById('deliveryNo');
+        const memoEl = document.getElementById('shippingMemo');
+        if(shData.workData.shippingDate && !dateEl.value) dateEl.value = shData.workData.shippingDate;
+        if(shData.workData.deliveryNo)  noEl.value   = shData.workData.deliveryNo;
+        if(shData.workData.memo)        memoEl.value = shData.workData.memo;
+      }
       saveLocalState();
     }
     renderPallets();
@@ -383,6 +396,45 @@ async function loadFromGas(){
   }finally{
     showLoading(false);
   }
+}
+
+// 作業中データをGASに保存
+async function saveShippingWork(){
+  if(!settings.gasUrl) return;
+  const workData = {
+    pallets: st.pallets,
+    bara: st.bara,
+    shippingDate: document.getElementById('shippingDate').value,
+    deliveryNo:   document.getElementById('deliveryNo').value.trim(),
+    memo:         document.getElementById('shippingMemo').value.trim(),
+    updatedAt:    new Date().toISOString()
+  };
+  try{
+    await gasPost({action:'saveShippingWork', workData});
+  }catch(e){ console.warn('作業中データ保存エラー',e); }
+}
+
+// ポーリング（30秒ごとにGASから最新データ取得）
+let _pollTimer = null;
+function startPolling(){
+  if(_pollTimer) clearInterval(_pollTimer);
+  _pollTimer = setInterval(async ()=>{
+    if(!settings.gasUrl) return;
+    try{
+      const shData = await gasGet('getShipping');
+      if(!shData || !shData.workData) return;
+      // 作業中データを静かに反映（フォーカス中はスキップ）
+      const focused = document.activeElement;
+      const isInput = focused && (focused.tagName==='INPUT'||focused.tagName==='SELECT'||focused.tagName==='TEXTAREA');
+      if(isInput) return;
+      if(shData.workData.pallets) st.pallets = shData.workData.pallets;
+      if(shData.workData.bara)    st.bara    = shData.workData.bara;
+      saveLocalState();
+      renderPallets();
+      renderBara();
+      renderMaterial();
+    }catch(e){}
+  }, 30000);
 }
 
 async function pingGas(){
@@ -440,17 +492,7 @@ function itemOptions(selectedId, enteredQty){
   return items.map(m=>`<option value="${esc(m.id)}" ${m.id==selectedId?'selected':''}>${esc(m.name)}${m.color?' ('+esc(m.color)+')':''}</option>`).join('');
 }
 
-// 数量警告テキストを返す
-function qtyWarning(itemId, qty){
-  if(!itemId) return ''; // 未選択は何も表示しない
-  const rem = planRemaining(itemId);
-  if(rem === null) return '<span style="color:#e94560;font-size:13px;font-weight:bold;">⚠ 計画外品目</span>';
-  const q = parseInt(qty) || 0;
-  // 入力数量が残数を超えた場合のみ警告
-  if(q > rem) return `<span style="color:#e94560;font-size:13px;font-weight:bold;">⚠ 残数超過（残${rem}）</span>`;
-  // 正常（残数表示）
-  return `<span style="color:#888;font-size:12px;">残数: ${rem}</span>`;
-}
+// 残数警告: 一時無効化
 
 // ===== パレット管理 =====
 function addPallet(){
@@ -486,6 +528,7 @@ function onPalletChange(pIdx,rIdx,field,val){
   st.pallets[pIdx].rows[rIdx][field] = field==='qty' ? (parseInt(val)||'') : val;
   saveLocalState();
   renderMaterial();
+  debounceWorkSave();
 }
 
 function renderPallets(){
@@ -508,7 +551,7 @@ function renderPallets(){
               oninput="onPalletChange(${pi},${ri},'qty',this.value)">
             <button class="btn-danger btn-sm" onclick="removePalletRow(${pi},${ri})">✕</button>
           </div>
-          <div style="text-align:right;margin-top:-4px;margin-bottom:4px;">${qtyWarning(r.itemId, r.qty)}</div>
+
         `).join('')}
         <button class="btn-gray btn-sm" onclick="addPalletRow(${pi})" style="margin-top:4px;">＋ 行追加</button>
       </div>
@@ -535,6 +578,7 @@ function onBaraChange(idx,field,val){
   st.bara[idx][field] = field==='qty' ? (parseInt(val)||'') : val;
   saveLocalState();
   renderMaterial();
+  debounceWorkSave();
 }
 
 function renderBara(){
@@ -550,7 +594,7 @@ function renderBara(){
         oninput="onBaraChange(${i},'qty',this.value)">
       <button class="btn-danger btn-sm" onclick="removeBaraRow(${i})">✕</button>
     </div>
-    <div style="text-align:right;margin-top:-4px;margin-bottom:4px;">${qtyWarning(r.itemId, r.qty)}</div>
+
   `).join('');
   el.innerHTML += `<button class="btn-gray btn-sm" onclick="addBaraRow()" style="margin-top:4px;">＋ 行追加</button>`;
 }
@@ -893,6 +937,13 @@ function showTab(id){
   document.querySelectorAll('.tab')[idx]?.classList.add('active');
   if(id==='tabMaterial') renderMaterial();
   if(id==='tabHistory') renderHistory();
+}
+
+// ===== 作業中データ保存デバウンス =====
+let _workSaveTimer = null;
+function debounceWorkSave(){
+  clearTimeout(_workSaveTimer);
+  _workSaveTimer = setTimeout(()=>{ saveShippingWork(); }, 2000);
 }
 
 // ===== ユーティリティ =====
