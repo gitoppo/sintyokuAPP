@@ -7,6 +7,7 @@ function doGet(e) {
     const action = e.parameter.action || '';
     if (action === 'ping') return ok({ message: 'pong' });
     if (action === 'getAll') return getAll_();
+    if (action === 'getShipping') return getShipping_();
     return errRes('unknown action: ' + action);
   } catch (ex) {
     return errRes(ex.message);
@@ -22,6 +23,7 @@ function doPost(e) {
     if (action === 'saveShiftAttendance') return saveShiftAttendance_(p);
     if (action === 'saveOperationLog')  return saveOperationLog_(p);
     if (action === 'saveAll')           return saveAll_(p);
+    if (action === 'saveShipping')       return saveShipping_(p);
     return errRes('unknown action: ' + action);
   } catch (ex) {
     return errRes(ex.message);
@@ -248,4 +250,57 @@ function ok(data) {
 }
 function errRes(msg) {
   return ContentService.createTextOutput(JSON.stringify({ ok: false, error: msg })).setMimeType(ContentService.MimeType.JSON);
+}
+function getShipping_() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName('deliveryHistory');
+    if (!sheet) {
+      sheet = ss.insertSheet('deliveryHistory');
+      sheet.appendRow(['id','timestamp','deviceName','deliveryNo','memo','palletsJson','shippingDate']);
+    }
+const rows = sheet.getDataRange().getValues();
+    const headers = rows[0];
+    const records = rows.slice(1).map(row => {
+      const obj = {};
+      headers.forEach((h, i) => obj[h] = row[i]);
+      return obj;
+    });
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: true, deliveryHistory: records }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch(err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+function saveShipping_(p) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName('deliveryHistory');
+    if (!sheet) {
+      sheet = ss.insertSheet('deliveryHistory');
+      sheet.appendRow(['id','timestamp','deviceName','deliveryNo','memo','palletsJson','shippingDate']);
+    }  
+ const records = p.records || [];
+    records.forEach(r => {
+      sheet.appendRow([
+        r.id || '',
+        r.timestamp || '',
+        r.deviceName || '',
+        r.deliveryNo || '',
+        r.memo || '',
+        r.palletsJson || '',
+        r.shippingDate || ''
+      ]);
+    });
+return ContentService
+      .createTextOutput(JSON.stringify({ ok: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch(err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
 }
