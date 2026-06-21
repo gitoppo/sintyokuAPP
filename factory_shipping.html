@@ -76,52 +76,88 @@ tr:nth-child(even) td{background:#f9f9f9;}
 /* ===== 印刷スタイル ===== */
 @media print{
   @page{margin:10mm;size:A4 portrait;}
+  /* A4印刷領域: 297mm - 20mm(上下余白) = 277mm */
   body{background:#fff;font-size:10.5pt;}
   #tabBar,#toast,#loading,.no-print{display:none!important;}
   .tabContent{display:none!important;}
   #printArea{display:block!important;}
 
-  /* 納品書 3連 */
-  .delivery-slip{
+  /* 納品書3連：A4を均等3分割 277mm÷3≒92mm、切り取り線込み */
+  .slip-page{width:100%;display:block;}
+  .slip-page-break{page-break-after:always;}
+
+  /* 切り取り線ラッパー：高さ固定で均等割り */
+  .slip-unit{
     width:100%;
-    height:85mm;
-    border:none;
-    padding:3mm 3mm 0 3mm;
-    page-break-inside:avoid;
+    height:90mm;
+    box-sizing:border-box;
+    overflow:hidden;
     display:flex;
     flex-direction:column;
-    font-size:10.5pt;
-    overflow:hidden;
-    box-sizing:border-box;
-    justify-content:flex-start;
   }
   .slip-divider{
-    border:none;
-    border-top:1px dashed #000;
-    margin:0;
-    page-break-after:avoid;
-    page-break-before:avoid;
+    width:100%;
+    height:7mm;
+    display:flex;
+    align-items:center;
+    box-sizing:border-box;
+    flex-shrink:0;
   }
-  .slip-title{font-size:12pt;font-weight:bold;text-align:center;margin-bottom:2mm;}
-  .slip-info{display:flex;justify-content:space-between;font-size:9pt;margin-bottom:1mm;}
-  .slip-table{width:100%;border-collapse:collapse;font-size:9pt;}
-  .slip-table th,.slip-table td{border:1px solid #000;padding:1mm 2mm;}
+  .slip-divider-line{
+    flex:1;
+    border-top:1px dashed #000;
+  }
+  .slip-divider-label{
+    font-size:7pt;
+    color:#999;
+    padding:0 2mm;
+    white-space:nowrap;
+  }
+  .delivery-slip{
+    flex:1;
+    padding:2mm 3mm;
+    box-sizing:border-box;
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+  }
+  .delivery-slip-empty{flex:1;}
+
+  .slip-title{font-size:11pt;font-weight:bold;text-align:center;margin-bottom:1mm;}
+  .slip-info{display:flex;justify-content:space-between;font-size:8.5pt;margin-bottom:1mm;}
+  .slip-meta{font-size:8pt;margin-bottom:1mm;}
+  .slip-table{width:100%;border-collapse:collapse;font-size:8.5pt;}
+  .slip-table th,.slip-table td{border:1px solid #000;padding:0.5mm 1.5mm;}
   .slip-table th{background:#eee;}
-  .slip-total{text-align:right;font-size:9pt;margin-top:1mm;}
+  .slip-total{text-align:right;font-size:8pt;margin-top:1mm;}
 
   /* チェックリスト */
-  .checklist-pallet{page-break-inside:avoid;margin-bottom:6mm;}
-  .checklist-title{font-size:12pt;font-weight:bold;margin-bottom:2mm;}
+  .checklist-header{font-size:10pt;margin-bottom:3mm;}
+  .checklist-pallet{
+    page-break-inside:avoid;
+    margin-bottom:0;
+    box-sizing:border-box;
+  }
+  .checklist-pallet-inner{
+    padding-bottom:4mm;
+  }
+  .checklist-title{font-size:11pt;font-weight:bold;margin-bottom:2mm;}
   .checklist-table{width:100%;border-collapse:collapse;font-size:10pt;}
   .checklist-table th,.checklist-table td{border:1px solid #000;padding:3mm 2mm;}
   .checklist-table th{background:#eee;}
   .checklist-check{width:10mm;text-align:center;}
+  .checklist-divider{
+    width:100%;
+    height:8mm;
+    display:flex;
+    align-items:center;
+    box-sizing:border-box;
+  }
+  .checklist-divider-line{flex:1;border-top:1px dashed #000;}
+  .checklist-divider-label{font-size:7pt;color:#999;padding:0 2mm;white-space:nowrap;}
 
   /* 改ページ制御 */
-  .slip-page{width:100%;}
-  .slip-page-break{page-break-after:always;}
   .checklist-page-break{page-break-after:always;}
-  .delivery-slip-empty{height:85mm;}
 }
 @media screen{
   #printArea{display:none;}
@@ -725,6 +761,12 @@ function openPrintDelivery(){
   printDelivery(grouped);
 }
 
+// 出荷日から伝票No自動生成: 2026-06-23 → 260623
+function autoSlipNo(date, index){
+  const d = date ? date.replace(/-/g,'').slice(2) : today().replace(/-/g,'').slice(2);
+  return d + '-' + String(index+1).padStart(2,'0');
+}
+
 function printDelivery(grouped){
   const date = document.getElementById('shippingDate').value || today();
   const deliveryNo = document.getElementById('deliveryNo').value.trim();
@@ -732,7 +774,7 @@ function printDelivery(grouped){
 
   // グループごとに納品書HTML生成
   const slips = grouped.map((g, gi)=>{
-    const slipNo = deliveryNo ? deliveryNo + '-' + String(gi+1).padStart(2,'0') : String(gi+1);
+    const slipNo = autoSlipNo(date, gi);
     let subtotal = 0;
     g.rows.forEach(r=>{ subtotal += (r.item.price||0) * r.qty; });
     const tax = Math.floor(subtotal * TAX_RATE);
@@ -740,20 +782,27 @@ function printDelivery(grouped){
     return buildSlipHTML(g.rows, g.groupName, date, slipNo, memo, subtotal, tax, total);
   });
 
-  // 3枚ずつA4用紙1枚に配置
+  // 3枚ずつA4用紙1枚に均等配置（各90mm固定、切り取り線7mm）
+  // A4印刷域277mm = slip-unit×3(90mm×3=270mm) + divider×2(7mm×2=14mm) ≒ 284mm → slip-unit 87mmで調整
+  const dividerHTML = `
+    <div class="slip-divider">
+      <div class="slip-divider-line"></div>
+      <div class="slip-divider-label">✂ 切り取り</div>
+      <div class="slip-divider-line"></div>
+    </div>`;
+
   let printContent = '';
   for(let i=0; i<slips.length; i+=3){
     const trio = slips.slice(i, i+3);
-    // 3枚に満たない場合は空スリップで埋める
-    while(trio.length < 3) trio.push('<div class="delivery-slip-empty"></div>');
+    while(trio.length < 3) trio.push('');
     const isLast = (i+3 >= slips.length);
     printContent += `
       <div class="slip-page${isLast ? '' : ' slip-page-break'}">
-        <div class="delivery-slip">${trio[0]}</div>
-        <hr class="slip-divider">
-        <div class="delivery-slip">${trio[1]}</div>
-        <hr class="slip-divider">
-        <div class="delivery-slip">${trio[2]}</div>
+        <div class="slip-unit"><div class="delivery-slip">${trio[0]}</div></div>
+        ${dividerHTML}
+        <div class="slip-unit"><div class="delivery-slip">${trio[1]}</div></div>
+        ${dividerHTML}
+        <div class="slip-unit"><div class="delivery-slip">${trio[2]}</div></div>
       </div>`;
   }
 
@@ -776,9 +825,7 @@ function buildSlipHTML(rows, groupName, date, slipNo, memo, subtotal, tax, total
         <div style="font-size:8pt;">TEL: ${esc(settings.companyTel)||''}</div>
       </div>
     </div>
-    <div style="font-size:9pt;margin-bottom:1mm;">
-      出荷日: ${date}　伝票No: ${esc(slipNo)}　品目: ${esc(groupName)}${memo?' 　備考: '+esc(memo):''}
-    </div>
+    <div class="slip-meta">出荷日: ${date}　伝票No: ${esc(slipNo)}　品目: ${esc(groupName)}${memo?' 　備考: '+esc(memo):''}</div>
     <table class="slip-table">
       <thead><tr><th>品目名</th><th>カラー</th><th>数量</th><th>単価</th><th>金額</th></tr></thead>
       <tbody>
@@ -810,28 +857,37 @@ function openPrintChecklist(){
   const date = document.getElementById('shippingDate').value || today();
   const deliveryNo = document.getElementById('deliveryNo').value.trim();
 
+  const checkDivider = `
+    <div class="checklist-divider">
+      <div class="checklist-divider-line"></div>
+      <div class="checklist-divider-label">✂ 切り取り</div>
+      <div class="checklist-divider-line"></div>
+    </div>`;
+
   // パレットごとのHTML生成
   const palletBlocks = validPallets.map((p, pi)=>{
     const validRows = p.rows.filter(r=>r.itemId&&r.qty);
     const palletNo = st.pallets.indexOf(p) + 1;
     return `
       <div class="checklist-pallet">
-        <div class="checklist-title">📦 パレット ${palletNo}</div>
-        <table class="checklist-table">
-          <thead><tr><th class="checklist-check">✓</th><th>品目名</th><th>カラー</th><th style="width:18mm;text-align:right;">数量</th></tr></thead>
-          <tbody>
-            ${validRows.map(r=>{
-              const item = st.itemMaster.find(m=>m.id==r.itemId);
-              if(!item) return '';
-              return `<tr>
-                <td class="checklist-check">□</td>
-                <td>${esc(item.name)}</td>
-                <td>${esc(item.color||'')}</td>
-                <td style="text-align:right;">${r.qty}</td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
+        <div class="checklist-pallet-inner">
+          <div class="checklist-title">📦 パレット ${palletNo}　<span style="font-size:9pt;font-weight:normal;">${date}</span></div>
+          <table class="checklist-table">
+            <thead><tr><th class="checklist-check">✓</th><th>品目名</th><th>カラー</th><th style="width:18mm;text-align:right;">数量</th></tr></thead>
+            <tbody>
+              ${validRows.map(r=>{
+                const item = st.itemMaster.find(m=>m.id==r.itemId);
+                if(!item) return '';
+                return `<tr>
+                  <td class="checklist-check">□</td>
+                  <td>${esc(item.name)}</td>
+                  <td>${esc(item.color||'')}</td>
+                  <td style="text-align:right;">${r.qty}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
       </div>`;
   });
 
@@ -840,31 +896,40 @@ function openPrintChecklist(){
   if(validBara.length > 0){
     palletBlocks.push(`
       <div class="checklist-pallet">
-        <div class="checklist-title">🚗 バラ（助手席/その他）</div>
-        <table class="checklist-table">
-          <thead><tr><th class="checklist-check">✓</th><th>品目名</th><th>カラー</th><th style="width:18mm;text-align:right;">数量</th></tr></thead>
-          <tbody>
-            ${validBara.map(r=>{
-              const item = st.itemMaster.find(m=>m.id==r.itemId);
-              if(!item) return '';
-              return `<tr>
-                <td class="checklist-check">□</td>
-                <td>${esc(item.name)}</td>
-                <td>${esc(item.color||'')}</td>
-                <td style="text-align:right;">${r.qty}</td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
+        <div class="checklist-pallet-inner">
+          <div class="checklist-title">🚗 バラ（助手席/その他）　<span style="font-size:9pt;font-weight:normal;">${date}</span></div>
+          <table class="checklist-table">
+            <thead><tr><th class="checklist-check">✓</th><th>品目名</th><th>カラー</th><th style="width:18mm;text-align:right;">数量</th></tr></thead>
+            <tbody>
+              ${validBara.map(r=>{
+                const item = st.itemMaster.find(m=>m.id==r.itemId);
+                if(!item) return '';
+                return `<tr>
+                  <td class="checklist-check">□</td>
+                  <td>${esc(item.name)}</td>
+                  <td>${esc(item.color||'')}</td>
+                  <td style="text-align:right;">${r.qty}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
       </div>`);
   }
 
-  // 3パレットずつA4用紙1枚に配置
-  let printContent = `<div style="font-size:9pt;margin-bottom:4mm;">出荷日: ${date}　伝票No: ${deliveryNo||'—'}</div>`;
-  for(let i=0; i<palletBlocks.length; i+=3){
-    const trio = palletBlocks.slice(i, i+3);
-    const isLast = (i+3 >= palletBlocks.length);
-    printContent += `<div class="${isLast ? '' : 'checklist-page-break'}">${trio.join('')}</div>`;
+  // パレット間に切り取り線を挿入、3つごとに改ページ
+  let printContent = '';
+  for(let i=0; i<palletBlocks.length; i++){
+    printContent += palletBlocks[i];
+    const isLast = (i === palletBlocks.length - 1);
+    const isPageEnd = ((i+1) % 3 === 0);
+    if(!isLast){
+      if(isPageEnd){
+        printContent += `<div class="checklist-page-break"></div>`;
+      } else {
+        printContent += checkDivider;
+      }
+    }
   }
 
   document.getElementById('printArea').innerHTML = printContent;
