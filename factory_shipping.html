@@ -294,6 +294,7 @@ function saveSettings(){
 // ===== ローカル状態 保存/読み込み =====
 function saveLocalState(){
   const save = {
+    itemMaster: st.itemMaster,
     pallets: st.pallets,
     bara: st.bara,
     deliveryHistory: st.deliveryHistory
@@ -305,6 +306,7 @@ function loadLocalState(){
   const s = localStorage.getItem('shippingState_v1');
   if(s){
     const d = JSON.parse(s);
+    st.itemMaster = d.itemMaster || [];
     st.pallets = d.pallets || [];
     st.bara    = d.bara    || [];
     st.deliveryHistory = d.deliveryHistory || [];
