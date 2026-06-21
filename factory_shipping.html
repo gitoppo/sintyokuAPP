@@ -87,9 +87,10 @@ tr:nth-child(even) td{background:#f9f9f9;}
   .slip-page-break{page-break-after:always;}
 
   /* 切り取り線ラッパー：高さ固定で均等割り */
+  /* A4印刷域277mm = slip-unit×3(87mm×3=261mm) + divider×2(8mm×2=16mm) = 277mm */
   .slip-unit{
     width:100%;
-    height:90mm;
+    height:87mm;
     box-sizing:border-box;
     overflow:hidden;
     display:flex;
@@ -97,21 +98,19 @@ tr:nth-child(even) td{background:#f9f9f9;}
   }
   .slip-divider{
     width:100%;
-    height:7mm;
+    height:8mm;
     display:flex;
     align-items:center;
     box-sizing:border-box;
     flex-shrink:0;
+    padding:0 10mm;
   }
   .slip-divider-line{
     flex:1;
     border-top:1px dashed #000;
   }
   .slip-divider-label{
-    font-size:7pt;
-    color:#999;
-    padding:0 2mm;
-    white-space:nowrap;
+    display:none;
   }
   .delivery-slip{
     flex:1;
@@ -154,7 +153,8 @@ tr:nth-child(even) td{background:#f9f9f9;}
     box-sizing:border-box;
   }
   .checklist-divider-line{flex:1;border-top:1px dashed #000;}
-  .checklist-divider-label{font-size:7pt;color:#999;padding:0 2mm;white-space:nowrap;}
+  .checklist-divider-label{display:none;}
+  .checklist-divider{padding:0 10mm;}
 
   /* 改ページ制御 */
   .checklist-page-break{page-break-after:always;}
