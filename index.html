@@ -1631,8 +1631,7 @@ function importCsv(input) {
         prePh: toNum(cols[2]), postPh: toNum(cols[3]),
         sheetNo: cols[4]||'', cutW: cols[5]||'', cutL: cols[6]||'',
         group: cols[7] || 'その他'
-     price: parseFloat(cols[8]) || 0 
- });
+      });
     });
     st.itemMaster = items;
     saveLocal();
