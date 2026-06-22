@@ -205,7 +205,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     </div>
     <!-- 右: 今日までの合計（過去） -->
     <div class="personal-col personal-col-total">
-      <div class="personal-col-header">📊 今日までの合計</div>
+      <div class="personal-col-header">📊 個人の合計</div>
       <div id="personal-total-list"></div>
     </div>
   </div>
@@ -965,31 +965,32 @@ function renderPersonal() {
     inputListEl.innerHTML = inputHtml || '<div class="text-muted f12" style="padding:8px">計画なし</div>';
   }
 
-  // ── 右カラム: 今日までの合計 ──────────────────
+  // ── 右カラム: 今日までの合計（この端末のみ） ──────────────────
   let totalHtml = '';
-  let grandTotal = 0, grandQty = 0;
+  let grandMyTotal = 0, grandQty = 0;
   rows.forEach(r => {
     const name = r.item ? r.item.name : '不明';
     const color = r.item ? r.item.color : '';
-    const pct = r.totalPct;
-    const pctColor = pct >= 100 ? 'var(--g)' : pct >= 50 ? 'var(--b)' : 'var(--muted)';
-    const barColor = pct >= 100 ? 'var(--g)' : pct >= 50 ? 'var(--b)' : 'var(--border)';
-    grandTotal += r.totalVal;
+    // この端末の数量・達成率
+    const myPct = r.myPct;
+    const pctColor = myPct >= 100 ? 'var(--g)' : myPct >= 50 ? 'var(--b)' : 'var(--muted)';
+    const barColor = myPct >= 100 ? 'var(--g)' : myPct >= 50 ? 'var(--b)' : 'var(--border)';
+    grandMyTotal += r.myVal;
     grandQty += r.qty;
     totalHtml += `<div class="total-col-item">
       <div class="total-col-name">${esc(name)} <span style="color:var(--muted)">${esc(color)}</span></div>
-      <div class="total-col-val" style="color:${pctColor}">${r.totalVal}<span style="font-size:11px;color:var(--muted)">/${r.qty}個</span></div>
-      <div class="total-pbar"><div class="total-pbar-fill" style="width:${Math.min(100,pct)}%;background:${barColor}"></div></div>
-      <div class="total-col-pct" style="color:${pctColor}">${pct}%</div>
+      <div class="total-col-val" style="color:${pctColor}">${r.myVal}<span style="font-size:11px;color:var(--muted)">/${r.qty}個</span></div>
+      <div class="total-pbar"><div class="total-pbar-fill" style="width:${Math.min(100,myPct)}%;background:${barColor}"></div></div>
+      <div class="total-col-pct" style="color:${pctColor}">${myPct}%</div>
     </div>`;
   });
-  // 全体合計行
-  const totalPct = grandQty > 0 ? Math.round(grandTotal / grandQty * 100) : 0;
-  const totalPctColor = totalPct >= 100 ? 'var(--g)' : totalPct >= 50 ? 'var(--b)' : 'var(--muted)';
+  // 全体合計行（個人）
+  const myTotalPct = grandQty > 0 ? Math.round(grandMyTotal / grandQty * 100) : 0;
+  const myTotalPctColor = myTotalPct >= 100 ? 'var(--g)' : myTotalPct >= 50 ? 'var(--b)' : 'var(--muted)';
   totalHtml += `<div style="padding:8px 8px;border-top:1px solid var(--g2);background:#052e16">
-    <div style="font-size:11px;color:var(--g);font-weight:700">合計</div>
-    <div style="font-size:15px;font-weight:700;color:${totalPctColor}">${grandTotal}<span style="font-size:11px;color:var(--muted)">/${grandQty}個</span></div>
-    <div style="font-size:11px;font-weight:700;color:${totalPctColor}">${totalPct}%</div>
+    <div style="font-size:11px;color:var(--g);font-weight:700">個人合計</div>
+    <div style="font-size:15px;font-weight:700;color:${myTotalPctColor}">${grandMyTotal}<span style="font-size:11px;color:var(--muted)">/${grandQty}個</span></div>
+    <div style="font-size:11px;font-weight:700;color:${myTotalPctColor}">${myTotalPct}%</div>
   </div>`;
   totalListEl.innerHTML = totalHtml;
 }
