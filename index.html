@@ -240,6 +240,33 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
       <button class="btn-primary" onclick="addPlan()" style="margin-left:auto">＋ 登録</button>
     </div>
   </div>
+  <!-- CSVインポート（アコーディオン） -->
+  <div style="margin-bottom:12px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
+    <div onclick="togglePlanCsvArea()" style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:#131c2e;cursor:pointer">
+      <span id="plan-csv-chevron" style="font-size:11px;color:var(--muted)">▶</span>
+      <span style="font-size:13px;font-weight:700;flex:1">📂 CSVインポート</span>
+      <span style="font-size:11px;color:var(--muted)">一括登録</span>
+    </div>
+    <div id="plan-csv-area" style="display:none;padding:12px 14px;background:var(--card)">
+      <div class="f12 text-muted mb8" style="line-height:1.8">
+        列順: <span style="color:var(--t)">品目名, カラー, 数量, 納期(YYYY-MM-DD), メモ, 優先(1/0)</span><br>
+        ・品目名＋カラーが品目マスターに登録済みであること<br>
+        ・既存計画への追記（上書きなし）<br>
+        ・ヘッダー行は自動スキップ
+      </div>
+      <div class="flex gap8" style="flex-wrap:wrap">
+        <label style="flex:1;min-width:160px">
+          <input type="file" id="plan-csv-file" accept=".csv" onchange="importPlanCsv(this)"
+            style="font-size:13px;color:var(--text);width:100%">
+        </label>
+        <button class="btn-sm" onclick="downloadPlanCsvTemplate()" style="flex-shrink:0;white-space:nowrap">
+          📋 テンプレート出力
+        </button>
+      </div>
+      <div id="plan-csv-result" style="margin-top:10px;font-size:12px;line-height:1.8"></div>
+    </div>
+  </div>
+
   <!-- 完了済み一括削除バー -->
   <div id="plan-bulk-bar" style="display:none;margin-bottom:8px">
     <button class="btn-sm btn-danger" onclick="askDeleteCompleted()" style="width:100%;padding:10px;font-size:13px;font-weight:600">
@@ -1028,6 +1055,117 @@ function setPost(planId, val) {
 // 計画タブ（③）
 // ============================================================
 function onPlanItemChange() {}
+
+// ── 計画CSVインポート ──────────────────────────────
+
+function togglePlanCsvArea() {
+  const area = document.getElementById('plan-csv-area');
+  const chev = document.getElementById('plan-csv-chevron');
+  const isOpen = area.style.display !== 'none';
+  area.style.display = isOpen ? 'none' : 'block';
+  chev.textContent = isOpen ? '▶' : '▼';
+}
+
+function importPlanCsv(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const lines = e.target.result.split('\n').map(l => l.trim()).filter(l => l);
+    const resultEl = document.getElementById('plan-csv-result');
+    let added = 0, skipped = [], rowNum = 0;
+
+    lines.forEach((line, idx) => {
+      // ヘッダー行を自動スキップ（1行目が数値でない列を含む場合）
+      if (idx === 0 && /品目名|name|item/i.test(line)) return;
+
+      rowNum++;
+      const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+      const [rawName, rawColor, rawQty, rawDate, rawMemo, rawPri] = cols;
+
+      if (!rawName || !rawColor) {
+        skipped.push(`行${rowNum}: 品目名またはカラーが空`);
+        return;
+      }
+
+      // 品目マスターから品目名＋カラーで一致するものを検索
+      const item = st.itemMaster.find(it =>
+        it.name.trim() === rawName.trim() && it.color.trim() === rawColor.trim()
+      );
+      if (!item) {
+        skipped.push(`行${rowNum}: 「${rawName} ${rawColor}」が品目マスターに未登録`);
+        return;
+      }
+
+      const qty = Math.max(1, toNum(rawQty));
+      if (!qty) {
+        skipped.push(`行${rowNum}: 数量が不正`);
+        return;
+      }
+
+      const date = sanitizeDateStr(rawDate);
+      if (!date) {
+        skipped.push(`行${rowNum}: 納期の形式が不正（YYYY-MM-DD）`);
+        return;
+      }
+
+      const plan = {
+        id: genId('p'),
+        itemId: item.id,
+        qty,
+        date,
+        memo: rawMemo || '',
+        priority: rawPri === '1' || rawPri === 'true'
+      };
+      st.plans.push(plan);
+      st.progress[plan.id] = { preDone: 0, postDone: {} };
+      added++;
+    });
+
+    // 結果表示
+    let html = '';
+    if (added > 0) {
+      html += `<div style="color:var(--g);font-weight:700">✅ ${added}件を追加しました</div>`;
+    }
+    if (skipped.length > 0) {
+      html += `<div style="color:var(--y);margin-top:4px;font-weight:700">⚠️ スキップ ${skipped.length}件</div>`;
+      html += skipped.map(s => `<div style="color:var(--muted);padding-left:8px">・${esc(s)}</div>`).join('');
+    }
+    if (added === 0 && skipped.length === 0) {
+      html = '<div style="color:var(--muted)">有効なデータがありませんでした</div>';
+    }
+    resultEl.innerHTML = html;
+
+    if (added > 0) {
+      saveLocal();
+      debouncedCloudSave();
+      renderAll();
+      showToast(`📂 計画を${added}件インポートしました`);
+    }
+    input.value = '';
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function downloadPlanCsvTemplate() {
+  if (!st.itemMaster.length) {
+    alert('品目マスターが登録されていません。⑥品目タブでCSVをインポートしてください。');
+    return;
+  }
+  const today = todayStr();
+  const header = '品目名,カラー,数量,納期,メモ,優先';
+  const rows = st.itemMaster.map(it =>
+    `${it.name},${it.color},100,${today},,0`
+  );
+  const csv = [header, ...rows].join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `計画テンプレート_${today}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 // 計画タブ: アコーディオン開閉状態（品目名 → true=開, false=閉）
 const _planGroupOpen = {};
