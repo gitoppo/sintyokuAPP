@@ -125,18 +125,43 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 .text-g{color:var(--g)}.text-r{color:var(--r)}.text-y{color:var(--y)}.text-b{color:var(--b)}.text-t{color:var(--t)}.text-muted{color:var(--muted)}
 .bold{font-weight:700}.f12{font-size:12px}.f13{font-size:13px}.f15{font-size:15px}
 .device-notice{background:#1a1a2e;border:1px solid var(--pu);border-radius:8px;padding:12px;text-align:center;color:var(--pu);margin-bottom:12px}
-/* 個人進捗 2カラム */
-.personal-2col{display:flex;gap:10px;min-height:0}
-.personal-left{flex:0 0 35%;min-width:0;overflow-y:auto;max-height:calc(100vh - 140px)}
-.personal-right{flex:0 0 65%;min-width:0;overflow-y:auto;max-height:calc(100vh - 140px)}
-.post-input-item{padding:8px 6px;border-bottom:1px solid #0d1520}
+/* 個人進捗 3カラム */
+.personal-3col{display:flex;gap:6px;min-height:0}
+.personal-col{flex:1;min-width:0;overflow-y:auto;max-height:calc(100vh - 140px);background:var(--card);border:1px solid var(--border);border-radius:10px}
+.personal-col-plan{flex:0 0 27%}
+.personal-col-input{flex:0 0 46%}
+.personal-col-total{flex:0 0 27%}
+.personal-col-header{font-size:11px;font-weight:700;color:var(--muted);padding:8px 10px 6px;border-bottom:1px solid var(--border);text-align:center;letter-spacing:.04em;position:sticky;top:0;background:var(--card);z-index:1}
+/* 計画カラム */
+.plan-col-item{padding:8px 8px 6px;border-bottom:1px solid #0d1520}
+.plan-col-item:last-child{border-bottom:none}
+.plan-col-name{font-size:12px;font-weight:700;color:var(--text);line-height:1.3}
+.plan-col-color{font-size:11px;color:var(--muted)}
+.plan-col-qty{font-size:13px;font-weight:700;color:var(--t);margin-top:2px}
+.plan-col-date{font-size:10px;color:var(--muted);margin-top:1px}
+/* 今日の進捗入力カラム */
+.post-input-item{padding:8px 8px 10px;border-bottom:1px solid #0d1520}
 .post-input-item:last-child{border-bottom:none}
-.post-item-label{font-size:12px;color:var(--muted);margin-bottom:6px;line-height:1.4}
-.post-item-qty{color:var(--t);font-weight:700;font-size:12px}
-.post-adj-row{display:flex;align-items:center;gap:5px}
-.post-adj-btn{width:38px;height:38px;border-radius:7px;border:1px solid var(--border);background:var(--faint);color:var(--text);font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer}
+.post-adj-row{display:flex;align-items:center;gap:4px}
+.post-adj-btn{width:36px;height:36px;border-radius:7px;border:1px solid var(--border);background:var(--faint);color:var(--text);font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer}
 .post-adj-btn:active{background:var(--border)}
-.post-num-input{flex:1;min-width:0;height:38px;text-align:center;font-size:16px;font-weight:700;border:1px solid var(--border);border-radius:7px;background:var(--faint);color:var(--text)}
+.post-num-input{flex:1;min-width:0;height:36px;text-align:center;font-size:15px;font-weight:700;border:1px solid var(--border);border-radius:7px;background:var(--faint);color:var(--text)}
+/* 達成ロック */
+.post-input-item.achieved{background:#0a1a0a}
+.post-input-item.achieved-over{background:#1a0d00}
+.post-num-input:disabled{opacity:0.5;cursor:not-allowed}
+.post-adj-btn:disabled{opacity:0.3;cursor:not-allowed}
+.achieved-banner{font-size:11px;font-weight:700;color:var(--g);background:#052e16;border:1px solid var(--g2);border-radius:5px;padding:3px 6px;text-align:center;margin-bottom:5px}
+.over-banner{font-size:11px;font-weight:700;color:var(--y);background:#1c1000;border:1px solid #854d0e;border-radius:5px;padding:3px 6px;text-align:center;margin-bottom:5px}
+.unlock-btn{font-size:11px;padding:4px 8px;border-radius:5px;border:1px solid var(--y);background:transparent;color:var(--y);cursor:pointer;width:100%;margin-top:3px}
+/* 合計カラム */
+.total-col-item{padding:8px 8px 6px;border-bottom:1px solid #0d1520}
+.total-col-item:last-child{border-bottom:none}
+.total-col-name{font-size:11px;color:var(--muted)}
+.total-col-val{font-size:15px;font-weight:700;margin-top:2px}
+.total-col-pct{font-size:11px;font-weight:700;margin-top:1px}
+.total-pbar{height:5px;background:#1a2535;border-radius:3px;overflow:hidden;margin-top:4px}
+.total-pbar-fill{height:100%;border-radius:3px;transition:width .4s}
 </style>
 </head>
 <body>
@@ -167,18 +192,21 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
       <div id="personal-date-disp" class="personal-date"></div>
     </div>
   </div>
-  <div class="personal-2col">
-    <!-- 左: 集計テーブル -->
-    <div class="personal-left">
-      <table class="personal-table" id="personal-table">
-        <thead><tr><th>品目/カラー</th><th>今日</th><th>サイクル</th></tr></thead>
-        <tbody id="personal-tbody"></tbody>
-      </table>
+  <div class="personal-3col">
+    <!-- 左: 計画（未来） -->
+    <div class="personal-col personal-col-plan">
+      <div class="personal-col-header">📋 計画</div>
+      <div id="personal-plan-list"></div>
     </div>
-    <!-- 右: 後工程入力 -->
-    <div class="personal-right">
-      <div class="card-title" style="font-size:11px;padding:4px 6px 8px">🖊 後工程入力</div>
+    <!-- 中央: 今日の進捗入力（現在） -->
+    <div class="personal-col personal-col-input">
+      <div class="personal-col-header">🖊 今日の進捗</div>
       <div id="personal-input-list"></div>
+    </div>
+    <!-- 右: 今日までの合計（過去） -->
+    <div class="personal-col personal-col-total">
+      <div class="personal-col-header">📊 今日までの合計</div>
+      <div id="personal-total-list"></div>
     </div>
   </div>
 </div>
@@ -796,112 +824,174 @@ function fmtH(h) {
 // ============================================================
 // 個人進捗タブ（②）
 // ============================================================
+
+// planId単位のロック解除状態（端末ローカル・ページ再読込でリセット）
+const _postUnlocked = {};
+
+function unlockPost(planId) {
+  _postUnlocked[planId] = true;
+  renderPersonal();
+}
+
 function renderPersonal() {
   const dn = st.deviceName;
   document.getElementById('personal-notice').style.display = dn ? 'none' : '';
   document.getElementById('personal-name-disp').textContent = dn || '（端末名未設定）';
   document.getElementById('personal-date-disp').textContent = fmtDate(todayStr());
 
-  const tbody = document.getElementById('personal-tbody');
-  const inputList = document.getElementById('personal-input-list');
-  if (!tbody || !inputList) return;
+  const planListEl  = document.getElementById('personal-plan-list');
+  const inputListEl = document.getElementById('personal-input-list');
+  const totalListEl = document.getElementById('personal-total-list');
+  if (!planListEl || !inputListEl || !totalListEl) return;
 
-  // 品目グループ別に今日・サイクルの個人集計
-  const today = todayStr();
-  const { days: cycleDays } = getCurrentCycle();
-
-  // planId → item のマップ
-  const rows = st.plans.map(plan => {
-    const item = st.itemMaster.find(it => it.id === plan.itemId);
-    if (!item) return null;
-    const prog = st.progress[plan.id] || { preDone:0, postDone:{} };
-    const todayVal = dn ? toNum((prog.postDone||{})[dn]) : 0;
-    // サイクル合計（この端末のみ、今サイクル内の全日付）
-    // postDoneは端末名単位の累計なので、cycleの集計は現在値をそのまま使う
-    const cycleVal = dn ? toNum((prog.postDone||{})[dn]) : 0;
-    return { plan, item, todayVal, cycleVal };
-  }).filter(Boolean);
-
-  // 品目名でグループ化
-  const groupMap = {};
-  rows.forEach(r => {
-    if (!groupMap[r.item.name]) groupMap[r.item.name] = [];
-    groupMap[r.item.name].push(r);
-  });
-
-  let tbodyHtml = '';
-  let totalToday = 0, totalCycle = 0;
-  Object.entries(groupMap).forEach(([name, items]) => {
-    tbodyHtml += `<tr class="group-row"><td colspan="3">${esc(name)}</td></tr>`;
-    items.forEach(r => {
-      totalToday += r.todayVal;
-      totalCycle += r.cycleVal;
-      tbodyHtml += `<tr>
-        <td style="padding-left:12px">　${esc(r.item.color)}</td>
-        <td>${r.todayVal}個</td>
-        <td>${r.cycleVal}個</td>
-      </tr>`;
-    });
-  });
-  tbodyHtml += `<tr class="total-row"><td>合計</td><td>${totalToday}個</td><td>${totalCycle}個</td></tr>`;
-  tbody.innerHTML = tbodyHtml;
-
-  // 後工程入力エリア（品目マスター登録順で固定）
-  let inputHtml = '';
-  // 品目マスター登録順でループ
+  // 品目マスター登録順でplanをまとめる
+  const rows = [];
   st.itemMaster.forEach(masterItem => {
-    // このmasterItemに対応するplanを全て取得
-    const matchPlans = rows.filter(r => r.item.id === masterItem.id);
-    if (!matchPlans.length) return;
-    matchPlans.forEach(r => {
-      const val = dn ? toNum((st.progress[r.plan.id]?.postDone||{})[dn]) : 0;
-      const qty = toNum(r.plan.qty);
-      const pct = qty > 0 ? Math.min(100, Math.round(val / qty * 100)) : 0;
-      const valColor = pct >= 100 ? 'var(--g)' : pct >= 50 ? 'var(--b)' : 'var(--text)';
-      const pctColor = pct >= 100 ? 'var(--g)' : pct >= 50 ? 'var(--b)' : 'var(--muted)';
-      inputHtml += `<div class="post-input-item">
-        <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:6px;flex-wrap:wrap">
-          <span style="font-size:13px;font-weight:700;color:var(--text)">${esc(r.item.name)}</span>
-          <span style="font-size:12px;color:var(--muted)">${esc(r.item.color)}</span>
-          <span style="font-size:11px;color:var(--muted);margin-left:auto">計画 ${qty}個</span>
-          <span style="font-size:12px;font-weight:700;color:${pctColor}">${pct}%</span>
-        </div>
-        <div class="post-adj-row">
-          <button class="post-adj-btn" onclick="adjustPost('${r.plan.id}',-1)">－</button>
-          <input class="post-num-input" type="number" id="post-inp-${r.plan.id}"
-            value="${val}" min="0"
-            style="color:${valColor};flex:1;width:auto"
-            onchange="setPost('${r.plan.id}',this.value)">
-          <button class="post-adj-btn" onclick="adjustPost('${r.plan.id}',1)">＋</button>
-        </div>
-      </div>`;
+    const matchPlans = st.plans.filter(p => p.itemId === masterItem.id);
+    matchPlans.forEach(plan => {
+      const prog = st.progress[plan.id] || { preDone:0, postDone:{} };
+      // この端末の数量
+      const myVal = dn ? toNum((prog.postDone || {})[dn]) : 0;
+      // 全端末合計
+      const totalVal = Object.values(prog.postDone || {}).reduce((s,v) => s + toNum(v), 0);
+      const qty = toNum(plan.qty);
+      // 全端末合計での達成率
+      const totalPct = qty > 0 ? Math.round(totalVal / qty * 100) : 0;
+      // この端末の達成率
+      const myPct = qty > 0 ? Math.round(myVal / qty * 100) : 0;
+      rows.push({ plan, item: masterItem, myVal, totalVal, qty, totalPct, myPct });
     });
   });
-  // マスターにない品目（念のため末尾に）
-  rows.filter(r => !st.itemMaster.find(it => it.id === r.item.id)).forEach(r => {
-    const val = dn ? toNum((st.progress[r.plan.id]?.postDone||{})[dn]) : 0;
-    const qty = toNum(r.plan.qty);
-    const pct = qty > 0 ? Math.min(100, Math.round(val / qty * 100)) : 0;
-    const valColor = pct >= 100 ? 'var(--g)' : pct >= 50 ? 'var(--b)' : 'var(--text)';
-    const pctColor = pct >= 100 ? 'var(--g)' : pct >= 50 ? 'var(--b)' : 'var(--muted)';
-    inputHtml += `<div class="post-input-item">
-      <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:6px;flex-wrap:wrap">
-        <span style="font-size:13px;font-weight:700;color:var(--text)">${esc(r.item.name)}</span>
-        <span style="font-size:12px;color:var(--muted)">${esc(r.item.color)}</span>
-        <span style="font-size:11px;color:var(--muted);margin-left:auto">計画 ${qty}個</span>
-        <span style="font-size:12px;font-weight:700;color:${pctColor}">${pct}%</span>
-      </div>
-      <div class="post-adj-row">
-        <button class="post-adj-btn" onclick="adjustPost('${r.plan.id}',-1)">－</button>
-        <input class="post-num-input" type="number" id="post-inp-${r.plan.id}"
-          value="${val}" min="0"
-          style="color:${valColor};flex:1;width:auto"
-          onchange="setPost('${r.plan.id}',this.value)">
-        <button class="post-adj-btn" onclick="adjustPost('${r.plan.id}',1)">＋</button>
-      </div>
+  // マスターに存在しないplanも末尾に（念のため）
+  st.plans.filter(p => !st.itemMaster.find(it => it.id === p.itemId)).forEach(plan => {
+    const prog = st.progress[plan.id] || { preDone:0, postDone:{} };
+    const myVal = dn ? toNum((prog.postDone || {})[dn]) : 0;
+    const totalVal = Object.values(prog.postDone || {}).reduce((s,v) => s + toNum(v), 0);
+    const qty = toNum(plan.qty);
+    rows.push({ plan, item: null, myVal, totalVal, qty, totalPct: qty > 0 ? Math.round(totalVal/qty*100) : 0, myPct: qty > 0 ? Math.round(myVal/qty*100) : 0 });
+  });
+
+  if (!rows.length) {
+    const msg = '<div class="text-muted f12" style="padding:12px;text-align:center">計画なし</div>';
+    planListEl.innerHTML = msg;
+    inputListEl.innerHTML = msg;
+    totalListEl.innerHTML = msg;
+    return;
+  }
+
+  // ── 左カラム: 計画 ──────────────────────────────
+  let planHtml = '';
+  rows.forEach(r => {
+    const name = r.item ? r.item.name : '不明';
+    const color = r.item ? r.item.color : '';
+    const isDone = r.qty > 0 && r.totalVal >= r.qty;
+    const doneStyle = isDone ? 'opacity:0.5' : '';
+    const priBadge = r.plan.priority ? '<span style="font-size:10px;color:#fb923c;background:#7c2d12;padding:1px 5px;border-radius:3px;margin-left:4px">優先</span>' : '';
+    const doneBadge = isDone ? '<span style="font-size:10px;color:#64748b;background:#1e293b;padding:1px 5px;border-radius:3px;margin-left:4px">✓完了</span>' : '';
+    planHtml += `<div class="plan-col-item" style="${doneStyle}">
+      <div class="plan-col-name">${esc(name)}${priBadge}${doneBadge}</div>
+      <div class="plan-col-color">${esc(color)}</div>
+      <div class="plan-col-qty">${r.qty}個</div>
+      <div class="plan-col-date">${fmtDate(r.plan.date)}${r.plan.memo ? '　'+esc(r.plan.memo) : ''}</div>
     </div>`;
   });
-  inputList.innerHTML = inputHtml || '<div class="text-muted f12" style="padding:8px">計画なし</div>';
+  planListEl.innerHTML = planHtml;
+
+  // ── 中央カラム: 今日の進捗入力 ──────────────────
+  // フォーカス中は innerHTML 全書換えしない
+  const focusedInInput = (() => {
+    const a = document.activeElement;
+    return a && (a.classList.contains('post-num-input') || a.classList.contains('post-adj-btn'));
+  })();
+
+  if (!focusedInInput) {
+    let inputHtml = '';
+    rows.forEach(r => {
+      const planId = r.plan.id;
+      const name = r.item ? r.item.name : '不明';
+      const color = r.item ? r.item.color : '';
+      const isAchieved = r.qty > 0 && r.totalVal >= r.qty;
+      const isUnlocked = !!_postUnlocked[planId];
+      const isLocked = isAchieved && !isUnlocked;
+      const isOver = r.totalVal > r.qty && r.qty > 0;
+
+      // 色
+      const myValColor = r.myPct >= 100 ? 'var(--g)' : r.myPct >= 50 ? 'var(--b)' : 'var(--text)';
+      const totalPctColor = r.totalPct >= 100 ? 'var(--g)' : r.totalPct >= 50 ? 'var(--b)' : 'var(--muted)';
+
+      // 達成バナー
+      let bannerHtml = '';
+      if (isOver && isUnlocked) {
+        bannerHtml = `<div class="over-banner">⚠️ 超過中 全端末${r.totalVal}/${r.qty}個（${r.totalPct}%）</div>`;
+      } else if (isAchieved && isUnlocked) {
+        bannerHtml = `<div class="over-banner">🔓 ロック解除中 全端末${r.totalVal}/${r.qty}個</div>`;
+      } else if (isAchieved) {
+        bannerHtml = `<div class="achieved-banner">✅ 達成済 全端末${r.totalVal}/${r.qty}個（${r.totalPct}%）</div>`;
+      }
+
+      // ロック解除ボタン
+      const unlockBtnHtml = isAchieved && !isUnlocked
+        ? `<button class="unlock-btn" onclick="unlockPost('${planId}')">🔓 ロック解除（次週ストック）</button>`
+        : '';
+
+      // 全端末合計の小表示
+      const totalBadge = !isAchieved
+        ? `<span style="font-size:10px;color:${totalPctColor};margin-left:auto">全端末: ${r.totalVal}/${r.qty}個 ${r.totalPct}%</span>`
+        : '';
+
+      const itemBgClass = isOver ? 'achieved-over' : (isAchieved ? 'achieved' : '');
+      const borderColor = isLocked ? 'border:1px solid var(--g2)' : (isOver ? 'border:1px solid #854d0e' : '');
+
+      inputHtml += `<div class="post-input-item ${itemBgClass}" style="${borderColor}">
+        <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:4px;flex-wrap:wrap">
+          <span style="font-size:12px;font-weight:700;color:var(--text)">${esc(name)}</span>
+          <span style="font-size:11px;color:var(--muted)">${esc(color)}</span>
+          ${totalBadge}
+        </div>
+        ${bannerHtml}
+        <div class="post-adj-row">
+          <button class="post-adj-btn" onclick="adjustPost('${planId}',-1)" ${isLocked ? 'disabled' : ''}>－</button>
+          <input class="post-num-input" type="number" id="post-inp-${planId}"
+            value="${r.myVal}" min="0"
+            style="color:${myValColor}"
+            ${isLocked ? 'disabled' : ''}
+            onchange="setPost('${planId}',this.value)">
+          <button class="post-adj-btn" onclick="adjustPost('${planId}',1)" ${isLocked ? 'disabled' : ''}>＋</button>
+        </div>
+        <div style="font-size:10px;color:var(--muted);text-align:right;margin-top:3px">この端末: ${r.myVal}個　${r.myPct}%</div>
+        ${unlockBtnHtml}
+      </div>`;
+    });
+    inputListEl.innerHTML = inputHtml || '<div class="text-muted f12" style="padding:8px">計画なし</div>';
+  }
+
+  // ── 右カラム: 今日までの合計 ──────────────────
+  let totalHtml = '';
+  let grandTotal = 0, grandQty = 0;
+  rows.forEach(r => {
+    const name = r.item ? r.item.name : '不明';
+    const color = r.item ? r.item.color : '';
+    const pct = r.totalPct;
+    const pctColor = pct >= 100 ? 'var(--g)' : pct >= 50 ? 'var(--b)' : 'var(--muted)';
+    const barColor = pct >= 100 ? 'var(--g)' : pct >= 50 ? 'var(--b)' : 'var(--border)';
+    grandTotal += r.totalVal;
+    grandQty += r.qty;
+    totalHtml += `<div class="total-col-item">
+      <div class="total-col-name">${esc(name)} <span style="color:var(--muted)">${esc(color)}</span></div>
+      <div class="total-col-val" style="color:${pctColor}">${r.totalVal}<span style="font-size:11px;color:var(--muted)">/${r.qty}個</span></div>
+      <div class="total-pbar"><div class="total-pbar-fill" style="width:${Math.min(100,pct)}%;background:${barColor}"></div></div>
+      <div class="total-col-pct" style="color:${pctColor}">${pct}%</div>
+    </div>`;
+  });
+  // 全体合計行
+  const totalPct = grandQty > 0 ? Math.round(grandTotal / grandQty * 100) : 0;
+  const totalPctColor = totalPct >= 100 ? 'var(--g)' : totalPct >= 50 ? 'var(--b)' : 'var(--muted)';
+  totalHtml += `<div style="padding:8px 8px;border-top:1px solid var(--g2);background:#052e16">
+    <div style="font-size:11px;color:var(--g);font-weight:700">合計</div>
+    <div style="font-size:15px;font-weight:700;color:${totalPctColor}">${grandTotal}<span style="font-size:11px;color:var(--muted)">/${grandQty}個</span></div>
+    <div style="font-size:11px;font-weight:700;color:${totalPctColor}">${totalPct}%</div>
+  </div>`;
+  totalListEl.innerHTML = totalHtml;
 }
 
 function adjustPost(planId, delta) {
@@ -1825,6 +1915,10 @@ function startPoll() {
     renderProgress();
     renderPlanList();
     renderItemList();
+    // 個人タブが開いている場合は達成状態を最新化
+    if (document.getElementById('panel-personal').classList.contains('active')) {
+      renderPersonal();
+    }
     // 勤怠パネルが開いていてフォーカスなしのみ更新
     if (document.getElementById('panel-attend').classList.contains('active') && !isMemberInputFocused()) {
       renderWeekHeader();
