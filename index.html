@@ -2048,7 +2048,17 @@ function importCsv(input) {
     });
     st.itemMaster = items;
     saveLocal();
-    debouncedCloudSave();
+    _itemMasterSaving = true; // ポーリング上書き防止
+    Cloud.saveItemMaster(
+      () => {
+        _itemMasterSaving = false;
+        showToast(`✅ 品目マスター ${items.length}件をクラウドに保存しました`);
+      },
+      () => {
+        _itemMasterSaving = false;
+        showToast('❌ クラウド保存失敗。設定タブから手動送信してください');
+      }
+    );
     renderAll();
     alert(`${items.length}件インポートしました`);
     input.value = '';
@@ -2146,6 +2156,9 @@ const Cloud = {
   savePlansProgress(cb, errCb) {
     this.post({ action:'savePlansProgress', plans: st.plans, progress: st.progress }, cb, errCb);
   },
+  saveItemMaster(cb, errCb) {
+    this.post({ action:'saveItemMaster', itemMaster: st.itemMaster }, cb, errCb);
+  },
   saveShiftAttend(cb, errCb) {
     this.post({ action:'saveShiftAttendance', baseShift: st.baseShift, weeklyAttend: st.weeklyAttend }, cb, errCb);
   },
@@ -2159,8 +2172,11 @@ const Cloud = {
   }
 };
 
+let _itemMasterSaving = false; // 品目マスター保存中フラグ
+
 function applyCloudData(json, forceShiftAttend) {
-  if (Array.isArray(json.itemMaster) && json.itemMaster.length > 0) {
+  // 品目マスター保存中はポーリングによる上書きをスキップ
+  if (!_itemMasterSaving && Array.isArray(json.itemMaster) && json.itemMaster.length > 0) {
     st.itemMaster = json.itemMaster.map(it => ({
       id: String(it.id||''), name: String(it.name||''), color: String(it.color||''),
       prePh: toNum(it.prePh), postPh: toNum(it.postPh),
