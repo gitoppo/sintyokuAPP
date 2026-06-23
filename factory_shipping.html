@@ -397,7 +397,22 @@ async function loadFromGas(){
   showLoading(true);
   try{
     const data = await gasGet('getAll');
-    if(data && data.itemMaster) st.itemMaster = data.itemMaster;
+    if(data && Array.isArray(data.itemMaster) && data.itemMaster.length > 0){
+      st.itemMaster = data.itemMaster.map(it=>({
+        id:        String(it.id||''),
+        name:      String(it.name||''),
+        color:     String(it.color||''),
+        prePh:     parseFloat(it.prePh)||0,
+        postPh:    parseFloat(it.postPh)||0,
+        sheetNo:   String(it.sheetNo||''),
+        cutW:      String(it.cutW||''),
+        cutL:      String(it.cutL||''),
+        group:     String(it.group||'その他'),
+        price:     parseFloat(it.price)||0,
+        dispName:  String(it.dispName||''),
+        dispColor: String(it.dispColor||'')
+      }));
+    }
     if(data && data.plans)      st.plans      = data.plans;
     if(data && data.progress)   st.progress   = data.progress;
     // 出荷履歴＋作業中データをGASから取得
