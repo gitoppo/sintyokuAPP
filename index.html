@@ -128,40 +128,40 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 /* 個人進捗 3カラム */
 .personal-3col{display:flex;gap:6px;min-height:0}
 .personal-col{flex:1;min-width:0;overflow-y:auto;max-height:calc(100vh - 140px);background:var(--card);border:1px solid var(--border);border-radius:10px}
-.personal-col-plan{flex:0 0 27%}
-.personal-col-input{flex:0 0 46%}
-.personal-col-total{flex:0 0 27%}
-.personal-col-header{font-size:11px;font-weight:700;color:var(--muted);padding:8px 10px 6px;border-bottom:1px solid var(--border);text-align:center;letter-spacing:.04em;position:sticky;top:0;background:var(--card);z-index:1}
+.personal-col-plan{flex:0 0 24%}
+.personal-col-input{flex:0 0 52%}
+.personal-col-total{flex:0 0 24%}
+.personal-col-header{font-size:12px;font-weight:700;color:var(--muted);padding:8px 10px 6px;border-bottom:1px solid var(--border);text-align:center;letter-spacing:.04em;position:sticky;top:0;background:var(--card);z-index:1}
 /* 計画カラム */
-.plan-col-item{padding:8px 8px 6px;border-bottom:1px solid #0d1520}
+.plan-col-item{padding:10px 10px 8px;border-bottom:1px solid #0d1520}
 .plan-col-item:last-child{border-bottom:none}
-.plan-col-name{font-size:12px;font-weight:700;color:var(--text);line-height:1.3}
-.plan-col-color{font-size:11px;color:var(--muted)}
-.plan-col-qty{font-size:13px;font-weight:700;color:var(--t);margin-top:2px}
-.plan-col-date{font-size:10px;color:var(--muted);margin-top:1px}
+.plan-col-name{font-size:16px;font-weight:700;color:var(--text);line-height:1.3}
+.plan-col-color{font-size:14px;color:var(--muted);margin-top:1px}
+.plan-col-qty{font-size:22px;font-weight:700;color:var(--t);margin-top:4px;line-height:1}
+.plan-col-date{font-size:11px;color:var(--muted);margin-top:4px}
 /* 今日の進捗入力カラム */
-.post-input-item{padding:8px 8px 10px;border-bottom:1px solid #0d1520}
+.post-input-item{padding:10px 10px 12px;border-bottom:1px solid #0d1520}
 .post-input-item:last-child{border-bottom:none}
-.post-adj-row{display:flex;align-items:center;gap:4px}
-.post-adj-btn{width:36px;height:36px;border-radius:7px;border:1px solid var(--border);background:var(--faint);color:var(--text);font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer}
+.post-adj-row{display:flex;align-items:center;gap:6px}
+.post-adj-btn{width:52px;height:52px;border-radius:9px;border:1px solid var(--border);background:var(--faint);color:var(--text);font-size:26px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer}
 .post-adj-btn:active{background:var(--border)}
-.post-num-input{flex:1;min-width:0;height:36px;text-align:center;font-size:15px;font-weight:700;border:1px solid var(--border);border-radius:7px;background:var(--faint);color:var(--text)}
+.post-num-input{flex:1;min-width:0;height:52px;text-align:center;font-size:22px;font-weight:700;border:1px solid var(--border);border-radius:9px;background:var(--faint);color:var(--text)}
 /* 達成ロック */
 .post-input-item.achieved{background:#0a1a0a}
 .post-input-item.achieved-over{background:#1a0d00}
 .post-num-input:disabled{opacity:0.5;cursor:not-allowed}
 .post-adj-btn:disabled{opacity:0.3;cursor:not-allowed}
-.achieved-banner{font-size:11px;font-weight:700;color:var(--g);background:#052e16;border:1px solid var(--g2);border-radius:5px;padding:3px 6px;text-align:center;margin-bottom:5px}
-.over-banner{font-size:11px;font-weight:700;color:var(--y);background:#1c1000;border:1px solid #854d0e;border-radius:5px;padding:3px 6px;text-align:center;margin-bottom:5px}
-.unlock-btn{font-size:11px;padding:4px 8px;border-radius:5px;border:1px solid var(--y);background:transparent;color:var(--y);cursor:pointer;width:100%;margin-top:3px}
+.achieved-banner{font-size:12px;font-weight:700;color:var(--g);background:#052e16;border:1px solid var(--g2);border-radius:5px;padding:4px 8px;text-align:center;margin-bottom:6px}
+.over-banner{font-size:12px;font-weight:700;color:var(--y);background:#1c1000;border:1px solid #854d0e;border-radius:5px;padding:4px 8px;text-align:center;margin-bottom:6px}
+.unlock-btn{font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid var(--y);background:transparent;color:var(--y);cursor:pointer;width:100%;margin-top:4px}
 /* 合計カラム */
-.total-col-item{padding:8px 8px 6px;border-bottom:1px solid #0d1520}
+.total-col-item{padding:10px 10px 8px;border-bottom:1px solid #0d1520}
 .total-col-item:last-child{border-bottom:none}
-.total-col-name{font-size:11px;color:var(--muted)}
-.total-col-val{font-size:15px;font-weight:700;margin-top:2px}
-.total-col-pct{font-size:11px;font-weight:700;margin-top:1px}
-.total-pbar{height:5px;background:#1a2535;border-radius:3px;overflow:hidden;margin-top:4px}
-.total-pbar-fill{height:100%;border-radius:3px;transition:width .4s}
+.total-col-name{font-size:13px;color:var(--muted);line-height:1.4}
+.total-col-val{font-size:20px;font-weight:700;margin-top:3px;line-height:1}
+.total-col-pct{font-size:13px;font-weight:700;margin-top:3px}
+.total-pbar{height:4px;background:#1a2535;border-radius:2px;overflow:hidden;margin-top:5px}
+.total-pbar-fill{height:100%;border-radius:2px;transition:width .4s}
 </style>
 </head>
 <body>
@@ -979,16 +979,16 @@ function renderPersonal() {
 
       // 全端末合計の小表示
       const totalBadge = !isAchieved
-        ? `<span style="font-size:10px;color:${totalPctColor};margin-left:auto">全端末: ${r.totalVal}/${r.qty}個 ${r.totalPct}%</span>`
+        ? `<span style="font-size:12px;color:${totalPctColor};margin-left:auto">全端末: ${r.totalVal}/${r.qty}個 ${r.totalPct}%</span>`
         : '';
 
       const itemBgClass = isOver ? 'achieved-over' : (isAchieved ? 'achieved' : '');
       const borderColor = isLocked ? 'border:1px solid var(--g2)' : (isOver ? 'border:1px solid #854d0e' : '');
 
       inputHtml += `<div class="post-input-item ${itemBgClass}" style="${borderColor}">
-        <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:4px;flex-wrap:wrap">
-          <span style="font-size:12px;font-weight:700;color:var(--text)">${esc(name)}</span>
-          <span style="font-size:11px;color:var(--muted)">${esc(color)}</span>
+        <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+          <span style="font-size:16px;font-weight:700;color:var(--text)">${esc(name)}</span>
+          <span style="font-size:14px;color:var(--muted)">${esc(color)}</span>
           ${totalBadge}
         </div>
         ${bannerHtml}
@@ -1001,7 +1001,7 @@ function renderPersonal() {
             onchange="setPost('${planId}',this.value)">
           <button class="post-adj-btn" onclick="adjustPost('${planId}',1)" ${isLocked ? 'disabled' : ''}>＋</button>
         </div>
-        <div style="font-size:10px;color:var(--muted);text-align:right;margin-top:3px">この端末: ${r.myVal}個　${r.myPct}%</div>
+        <div style="font-size:12px;color:var(--muted);text-align:right;margin-top:4px">この端末: ${r.myVal}個　${r.myPct}%</div>
         ${unlockBtnHtml}
       </div>`;
     });
@@ -1022,7 +1022,7 @@ function renderPersonal() {
     grandQty += r.qty;
     totalHtml += `<div class="total-col-item">
       <div class="total-col-name">${esc(name)} <span style="color:var(--muted)">${esc(color)}</span></div>
-      <div class="total-col-val" style="color:${pctColor}">${r.myVal}<span style="font-size:11px;color:var(--muted)">/${r.qty}個</span></div>
+      <div class="total-col-val" style="color:${pctColor}">${r.myVal}<span style="font-size:13px;color:var(--muted)">/${r.qty}個</span></div>
       <div class="total-pbar"><div class="total-pbar-fill" style="width:${Math.min(100,myPct)}%;background:${barColor}"></div></div>
       <div class="total-col-pct" style="color:${pctColor}">${myPct}%</div>
     </div>`;
@@ -1030,10 +1030,10 @@ function renderPersonal() {
   // 全体合計行（個人）
   const myTotalPct = grandQty > 0 ? Math.round(grandMyTotal / grandQty * 100) : 0;
   const myTotalPctColor = myTotalPct >= 100 ? 'var(--g)' : myTotalPct >= 50 ? 'var(--b)' : 'var(--muted)';
-  totalHtml += `<div style="padding:8px 8px;border-top:1px solid var(--g2);background:#052e16">
-    <div style="font-size:11px;color:var(--g);font-weight:700">個人合計</div>
-    <div style="font-size:15px;font-weight:700;color:${myTotalPctColor}">${grandMyTotal}<span style="font-size:11px;color:var(--muted)">/${grandQty}個</span></div>
-    <div style="font-size:11px;font-weight:700;color:${myTotalPctColor}">${myTotalPct}%</div>
+  totalHtml += `<div style="padding:10px 10px;border-top:1px solid var(--g2);background:#052e16">
+    <div style="font-size:13px;color:var(--g);font-weight:700">個人合計</div>
+    <div style="font-size:20px;font-weight:700;color:${myTotalPctColor}">${grandMyTotal}<span style="font-size:13px;color:var(--muted)">/${grandQty}個</span></div>
+    <div style="font-size:13px;font-weight:700;color:${myTotalPctColor}">${myTotalPct}%</div>
   </div>`;
   totalListEl.innerHTML = totalHtml;
 }
