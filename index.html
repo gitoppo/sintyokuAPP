@@ -2080,7 +2080,8 @@ function applyCloudData(json, forceShiftAttend) {
       cutL: String(it.cutL||''), group: String(it.group||'その他')
     }));
   }
-  if (Array.isArray(json.plans) && json.plans.length > 0) {
+  if (Array.isArray(json.plans)) {
+    // 空配列も反映（PC側で全削除した場合に対応）
     st.plans = json.plans.map(p => ({
       id: String(p.id||''), date: sanitizeDateStr(p.date),
       itemId: String(p.itemId||''), qty: toNum(p.qty),
