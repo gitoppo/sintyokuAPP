@@ -251,8 +251,20 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
       <div class="f12 text-muted mb8" style="line-height:1.8">
         列順: <span style="color:var(--t)">品目名, カラー, 数量, 納期(YYYY-MM-DD), メモ, 優先(1/0)</span><br>
         ・品目名＋カラーが品目マスターに登録済みであること<br>
-        ・既存計画への追記（上書きなし）<br>
         ・ヘッダー行は自動スキップ
+      </div>
+      <!-- 追記・上書きモード選択 -->
+      <div style="display:flex;gap:16px;margin-bottom:10px;font-size:13px">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="radio" name="plan-csv-mode" value="append" checked>
+          <span>追記</span>
+          <span class="f12 text-muted">（既存計画はそのまま）</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="radio" name="plan-csv-mode" value="overwrite">
+          <span>上書き</span>
+          <span class="f12 text-muted">（同一品目＋カラーの未完了を更新・数量0はスキップ）</span>
+        </label>
       </div>
       <div class="flex gap8" style="flex-wrap:wrap">
         <label style="flex:1;min-width:160px">
@@ -697,11 +709,13 @@ function renderPreGroupHTML(g, _done, _cardStyle, _badge) {
       <div class="f12 text-muted mb8">後工程（全端末合計・読み取り専用）</div>
       ${postRows.map(row => {
         const pctColor = row.pct >= 100 ? 'var(--g)' : row.pct >= 50 ? 'var(--b)' : 'var(--muted)';
+        const pctLabel = row.qty === 0 ? '－' : `${row.pct}%`;
+        const barWidth = row.qty === 0 ? 0 : row.pct;
         return `<div class="post-row">
-          <div class="post-label">${esc(row.item ? row.item.color : '?')}</div>
-          <div class="pbar-wrap"><div class="pbar-fill" style="width:${row.pct}%;background:${pctColor}"></div></div>
+          <div class="post-label">${esc(row.item ? row.item.color : '?')}${row.qty === 0 ? ' <span class="f12 text-muted">（数量未定）</span>' : ''}</div>
+          <div class="pbar-wrap"><div class="pbar-fill" style="width:${barWidth}%;background:${pctColor}"></div></div>
           <div class="post-val" style="color:${pctColor}">${row.postTotal}</div>
-          <div class="f12 text-muted" style="min-width:40px;text-align:right">${row.pct}%</div>
+          <div class="f12 text-muted" style="min-width:40px;text-align:right">${pctLabel}</div>
         </div>`;
       }).join('')}
     </div>
@@ -770,6 +784,7 @@ function renderAlertBar(groups) {
   let totalNeedMin = 0;
   groups.forEach(g => {
     g.plans.forEach(p => {
+      if (toNum(p.qty) === 0) return; // 数量0は計算対象外
       const item = st.itemMaster.find(it => it.id === p.itemId);
       if (!item) return;
       totalNeedMin += toNum(p.qty) * toNum(item.prePh);
@@ -781,6 +796,7 @@ function renderAlertBar(groups) {
   let totalRemMin = 0;
   groups.forEach(g => {
     g.plans.forEach(p => {
+      if (toNum(p.qty) === 0) return; // 数量0は計算対象外
       const item = st.itemMaster.find(it => it.id === p.itemId);
       if (!item) return;
       const prog = st.progress[p.id];
@@ -1097,9 +1113,17 @@ function importPlanCsv(input) {
         return;
       }
 
-      const qty = Math.max(1, toNum(rawQty));
-      if (!qty) {
-        skipped.push(`行${rowNum}: 数量が不正`);
+      if (rawQty === undefined || rawQty === null || rawQty.trim() === '') {
+        skipped.push(`行${rowNum}: 数量が空です`);
+        return;
+      }
+      const qty = toNum(rawQty); // 0を許容
+
+      const importMode = document.querySelector('input[name="plan-csv-mode"]:checked')?.value || 'append';
+
+      // 上書きモードでは数量0はスキップ
+      if (importMode === 'overwrite' && qty === 0) {
+        skipped.push(`行${rowNum}: 「${rawName} ${rawColor}」数量0は上書きモードではスキップされます（手入力で変更してください）`);
         return;
       }
 
@@ -1109,17 +1133,35 @@ function importPlanCsv(input) {
         return;
       }
 
-      const plan = {
-        id: genId('p'),
-        itemId: item.id,
-        qty,
-        date,
-        memo: rawMemo || '',
-        priority: rawPri === '1' || rawPri === 'true'
-      };
-      st.plans.push(plan);
-      st.progress[plan.id] = { preDone: 0, postDone: {} };
-      added++;
+      if (importMode === 'overwrite') {
+        // 同一品目＋カラーの未完了計画を検索
+        const existing = st.plans.find(p => {
+          if (p.itemId !== item.id) return false;
+          const prog = st.progress[p.id] || { postDone: {} };
+          const postTotal = Object.values(prog.postDone || {}).reduce((s,v) => s + toNum(v), 0);
+          const isDone = toNum(p.qty) > 0 && postTotal >= toNum(p.qty);
+          return !isDone; // 未完了のみ対象
+        });
+        if (existing) {
+          existing.qty      = qty;
+          existing.date     = date;
+          existing.memo     = rawMemo || '';
+          existing.priority = rawPri === '1' || rawPri === 'true';
+          added++;
+        } else {
+          // 既存なし → 新規追加
+          const plan = { id: genId('p'), itemId: item.id, qty, date, memo: rawMemo || '', priority: rawPri === '1' || rawPri === 'true' };
+          st.plans.push(plan);
+          st.progress[plan.id] = { preDone: 0, postDone: {} };
+          added++;
+        }
+      } else {
+        // 追記モード
+        const plan = { id: genId('p'), itemId: item.id, qty, date, memo: rawMemo || '', priority: rawPri === '1' || rawPri === 'true' };
+        st.plans.push(plan);
+        st.progress[plan.id] = { preDone: 0, postDone: {} };
+        added++;
+      }
     });
 
     // 結果表示
@@ -1312,7 +1354,7 @@ function addPlan() {
   const plan = {
     id: genId('p'),
     itemId: sel.value,
-    qty: Math.max(1, toNum(qty.value)),
+    qty: toNum(qty.value),
     date: sanitizeDateStr(dateEl.value) || todayStr(),
     memo: memo.value.trim(),
     priority: pri.checked
@@ -1367,7 +1409,7 @@ function confirmEditPlan() {
   if (!sel.value) { alert('品目を選択してください'); return; }
 
   p.itemId   = sel.value;
-  p.qty      = Math.max(1, toNum(document.getElementById('edit-qty').value));
+  p.qty      = toNum(document.getElementById('edit-qty').value);
   p.date     = sanitizeDateStr(document.getElementById('edit-date').value) || p.date;
   p.memo     = document.getElementById('edit-memo').value.trim();
   p.priority = document.getElementById('edit-priority').checked;
