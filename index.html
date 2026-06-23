@@ -1102,7 +1102,7 @@ function _applyPlanCsv(csvText, forceZero) {
   const lines = csvText.split('\n').map(l => l.trim()).filter(l => l);
   const resultEl = document.getElementById('plan-csv-result');
   const importMode = document.querySelector('input[name="plan-csv-mode"]:checked')?.value || 'append';
-  let added = 0, skipped = [], zeroWithProgress = [], rowNum = 0;
+  let added = 0, updated = 0, skipped = [], zeroWithProgress = [], rowNum = 0;
 
   // forceZero時は保留リストをそのまま適用
   if (forceZero) {
@@ -1114,7 +1114,7 @@ function _applyPlanCsv(csvText, forceZero) {
       added++;
     });
     _csvPendingZeroOverwrite = [];
-    _showCsvResult(resultEl, added, [], []);
+    _showCsvResult(resultEl, 0, added, [], []);
     if (added > 0) { saveLocal(); debouncedCloudSave(); renderAll(); showToast(`📂 計画を${added}件上書きしました`); }
     return;
   }
@@ -1156,13 +1156,14 @@ function _applyPlanCsv(csvText, forceZero) {
     const priority = rawPri === '1' || rawPri === 'true';
 
     if (importMode === 'overwrite') {
-      // 未完了の既存計画を検索
-      const existing = st.plans.find(p => {
-        if (p.itemId !== item.id) return false;
+      // 同一itemIdを持つ計画を全て取得し、未完了のものを検索
+      const existingList = st.plans.filter(p => p.itemId === item.id);
+      const existing = existingList.find(p => {
         const prog = st.progress[p.id] || { postDone: {} };
         const postTotal = Object.values(prog.postDone || {}).reduce((s,v) => s + toNum(v), 0);
-        const isDone = toNum(p.qty) > 0 && postTotal >= toNum(p.qty);
-        return !isDone;
+        // 完了済み（数量>0かつ後工程合計>=数量）はスキップ
+        if (toNum(p.qty) > 0 && postTotal >= toNum(p.qty)) return false;
+        return true; // 未完了（数量0含む）
       });
 
       if (existing && qty === 0) {
@@ -1176,10 +1177,10 @@ function _applyPlanCsv(csvText, forceZero) {
         }
         // 進捗0なら警告なしで上書き
         existing.qty = qty; existing.date = date; existing.memo = memo; existing.priority = priority;
-        added++;
+        updated++;
       } else if (existing) {
         existing.qty = qty; existing.date = date; existing.memo = memo; existing.priority = priority;
-        added++;
+        updated++;
       } else {
         // 既存なし → 新規追加
         const plan = { id: genId('p'), itemId: item.id, qty, date, memo, priority };
@@ -1196,14 +1197,17 @@ function _applyPlanCsv(csvText, forceZero) {
     }
   });
 
-  _showCsvResult(resultEl, added, skipped, zeroWithProgress);
-  if (added > 0) { saveLocal(); debouncedCloudSave(); renderAll(); showToast(`📂 計画を${added}件インポートしました`); }
+  _showCsvResult(resultEl, added, updated, skipped, zeroWithProgress);
+  if (added > 0 || updated > 0) { saveLocal(); debouncedCloudSave(); renderAll(); showToast(`📂 新規${added}件追加・${updated}件上書きしました`); }
 }
 
-function _showCsvResult(resultEl, added, skipped, zeroWithProgress) {
+function _showCsvResult(resultEl, added, updated, skipped, zeroWithProgress) {
   let html = '';
+  if (updated > 0) {
+    html += `<div style="color:var(--b);font-weight:700">✏️ ${updated}件を上書きしました</div>`;
+  }
   if (added > 0) {
-    html += `<div style="color:var(--g);font-weight:700">✅ ${added}件を処理しました</div>`;
+    html += `<div style="color:var(--g);font-weight:700">✅ ${added}件を新規追加しました</div>`;
   }
   if (zeroWithProgress.length > 0) {
     html += `<div style="color:var(--y);font-weight:700;margin-top:8px">⚠️ 以下の計画は進捗データがあります。数量0で上書きしますか？</div>`;
@@ -1220,7 +1224,7 @@ function _showCsvResult(resultEl, added, skipped, zeroWithProgress) {
     html += `<div style="color:var(--y);margin-top:8px;font-weight:700">⚠️ スキップ ${skipped.length}件</div>`;
     html += skipped.map(s => `<div style="color:var(--muted);padding-left:8px">・${esc(s)}</div>`).join('');
   }
-  if (added === 0 && skipped.length === 0 && zeroWithProgress.length === 0) {
+  if (added === 0 && updated === 0 && skipped.length === 0 && zeroWithProgress.length === 0) {
     html = '<div style="color:var(--muted)">有効なデータがありませんでした</div>';
   }
   resultEl.innerHTML = html;
