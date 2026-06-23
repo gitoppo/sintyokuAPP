@@ -280,9 +280,12 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
   </div>
 
   <!-- 完了済み一括削除バー -->
-  <div id="plan-bulk-bar" style="display:none;margin-bottom:8px">
-    <button class="btn-sm btn-danger" onclick="askDeleteCompleted()" style="width:100%;padding:10px;font-size:13px;font-weight:600">
+  <div id="plan-bulk-bar" style="display:none;margin-bottom:8px;gap:6px">
+    <button class="btn-sm btn-danger" onclick="askDeleteCompleted()" style="flex:1;padding:10px;font-size:13px;font-weight:600">
       🗑 完了済みを一括削除
+    </button>
+    <button class="btn-sm" onclick="askResetAllPlans()" style="flex:1;padding:10px;font-size:13px;font-weight:600;border-color:#7c3aed;color:#a78bfa;background:#1e1040">
+      🔄 全計画をリセット
     </button>
   </div>
   <div id="plan-list"></div>
@@ -396,6 +399,23 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     <div class="flex gap8">
       <button class="btn-sm" onclick="closeModal('modal-del-completed')" style="flex:1">キャンセル</button>
       <button class="btn-sm btn-danger" onclick="confirmDeleteCompleted()" style="flex:1">削除する</button>
+    </div>
+  </div>
+</div>
+
+<!-- 全計画リセット確認モーダル -->
+<div id="modal-reset-plans" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-title" style="color:#a78bfa">🔄 全計画をリセット</div>
+    <div class="f13 text-muted mb12">
+      <strong style="color:#fca5a5">全ての計画と進捗データを削除します。</strong><br>
+      この操作は元に戻せません。<br>
+      品目マスターの並び順変更・再インポート前などにご使用ください。
+    </div>
+    <div id="modal-reset-plans-body" class="f13 text-muted mb12"></div>
+    <div class="flex gap8">
+      <button class="btn-sm" onclick="closeModal('modal-reset-plans')" style="flex:1">キャンセル</button>
+      <button class="btn-sm btn-danger" onclick="confirmResetAllPlans()" style="flex:1;background:#450a0a">全て削除する</button>
     </div>
   </div>
 </div>
@@ -1296,7 +1316,14 @@ function renderPlanList() {
     return postTotal >= toNum(p.qty) && toNum(p.qty) > 0;
   }).map(p => p.id);
   const bulkBar = document.getElementById('plan-bulk-bar');
-  if (bulkBar) bulkBar.style.display = completedIds.length > 0 ? '' : 'none';
+  if (bulkBar) {
+    // 計画が1件以上あればバー表示（リセットボタンを常に使えるように）
+    bulkBar.style.display = st.plans.length > 0 ? 'flex' : 'none';
+    // 完了済み削除ボタンは完了済みがある時だけ有効
+    const delBtn = bulkBar.querySelector('button:first-child');
+    if (delBtn) delBtn.style.opacity = completedIds.length > 0 ? '1' : '0.3';
+    if (delBtn) delBtn.disabled = completedIds.length === 0;
+  }
 
   if (!st.plans.length) {
     el.innerHTML = '<div class="text-muted f13" style="padding:12px">計画がありません</div>';
@@ -1482,6 +1509,24 @@ function confirmEditPlan() {
   saveLocal();
   debouncedCloudSave();
   renderAll();
+}
+
+// ── 全計画リセット ──────────────────────
+function askResetAllPlans() {
+  if (!st.plans.length) { alert('計画がありません'); return; }
+  const bodyEl = document.getElementById('modal-reset-plans-body');
+  bodyEl.innerHTML = `計画 <strong style="color:#fca5a5">${st.plans.length}件</strong>・進捗データ全てを削除します。`;
+  document.getElementById('modal-reset-plans').classList.add('open');
+}
+
+function confirmResetAllPlans() {
+  st.plans = [];
+  st.progress = {};
+  closeModal('modal-reset-plans');
+  saveLocal();
+  debouncedCloudSave();
+  renderAll();
+  showToast('🔄 全計画・進捗データをリセットしました');
 }
 
 // ── 完了済み一括削除 ──────────────────────
