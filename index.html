@@ -344,7 +344,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 <div id="panel-items" class="panel">
   <div class="card mb12">
     <div class="card-title mb8">CSVインポート</div>
-    <div class="f12 text-muted mb8">列順: 品目名, カラー, 前工程時間(分/個), 後工程時間(分/個), シート品番, カット幅, カット長, グループ</div>
+    <div class="f12 text-muted mb8">列順: 品目名, カラー, 前工程時間(分/個), 後工程時間(分/個), シート品番, カット幅, カット長, グループ, 単価, 表示名, 表示カラー<br>※表示名・表示カラーは省略可（空欄時は品目名・カラーをそのまま使用）</div>
     <input type="file" id="csv-file" accept=".csv" onchange="importCsv(this)" style="font-size:13px;color:var(--text)">
   </div>
   <div id="item-list"></div>
@@ -585,6 +585,9 @@ function getCurrentCycle() {
 
 function toNum(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
 function genId(prefix) { return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2,5); }
+// 表示名・表示カラー取得（dispName/dispColorが空なら正式名を使用）
+function dispN(item) { return (item && item.dispName)  ? item.dispName  : (item ? item.name  : ''); }
+function dispC(item) { return (item && item.dispColor) ? item.dispColor : (item ? item.color : ''); }
 
 // オフセット付きでサイクル開始日と日付リストを返す（勤怠タブ専用）
 function getDisplayCycle() {
@@ -638,12 +641,13 @@ function renderProgress() {
 }
 
 function buildPreGroups() {
-  // 品目名でグルーピング
+  // 品目名（表示名優先）でグルーピング・数量0は除外
   const map = {};
   st.plans.forEach(plan => {
+    if (toNum(plan.qty) === 0) return; // 数量0は非表示
     const item = st.itemMaster.find(it => it.id === plan.itemId);
     if (!item) return;
-    const key = item.name;
+    const key = dispN(item);
     if (!map[key]) map[key] = { name: key, plans: [], items: [] };
     map[key].plans.push(plan);
     if (!map[key].items.find(it => it.id === item.id)) map[key].items.push(item);
@@ -711,8 +715,9 @@ function renderPreGroupHTML(g, _done, _cardStyle, _badge) {
         const pctColor = row.pct >= 100 ? 'var(--g)' : row.pct >= 50 ? 'var(--b)' : 'var(--muted)';
         const pctLabel = row.qty === 0 ? '－' : `${row.pct}%`;
         const barWidth = row.qty === 0 ? 0 : row.pct;
+        const colorLabel = dispC(row.item) || '?';
         return `<div class="post-row">
-          <div class="post-label">${esc(row.item ? row.item.color : '?')}${row.qty === 0 ? ' <span class="f12 text-muted">（数量未定）</span>' : ''}</div>
+          <div class="post-label">${esc(colorLabel)}${row.qty === 0 ? ' <span class="f12 text-muted">（数量未定）</span>' : ''}</div>
           <div class="pbar-wrap"><div class="pbar-fill" style="width:${barWidth}%;background:${pctColor}"></div></div>
           <div class="post-val" style="color:${pctColor}">${row.postTotal}</div>
           <div class="f12 text-muted" style="min-width:40px;text-align:right">${pctLabel}</div>
@@ -890,28 +895,27 @@ function renderPersonal() {
   // 品目マスター登録順でplanをまとめる
   const rows = [];
   st.itemMaster.forEach(masterItem => {
-    const matchPlans = st.plans.filter(p => p.itemId === masterItem.id);
+    const matchPlans = st.plans.filter(p => p.itemId === masterItem.id && toNum(p.qty) > 0); // 数量0は非表示
     matchPlans.forEach(plan => {
       const prog = st.progress[plan.id] || { preDone:0, postDone:{} };
-      // この端末の数量
       const myVal = dn ? toNum((prog.postDone || {})[dn]) : 0;
-      // 全端末合計
       const totalVal = Object.values(prog.postDone || {}).reduce((s,v) => s + toNum(v), 0);
       const qty = toNum(plan.qty);
-      // 全端末合計での達成率
       const totalPct = qty > 0 ? Math.round(totalVal / qty * 100) : 0;
-      // この端末の達成率
       const myPct = qty > 0 ? Math.round(myVal / qty * 100) : 0;
-      rows.push({ plan, item: masterItem, myVal, totalVal, qty, totalPct, myPct });
+      // 表示名・表示カラーを優先
+      const name  = dispN(masterItem);
+      const color = dispC(masterItem);
+      rows.push({ plan, item: masterItem, myVal, totalVal, qty, totalPct, myPct, name, color });
     });
   });
-  // マスターに存在しないplanも末尾に（念のため）
-  st.plans.filter(p => !st.itemMaster.find(it => it.id === p.itemId)).forEach(plan => {
+  // マスターに存在しないplanも末尾に（念のため）・数量0は除外
+  st.plans.filter(p => !st.itemMaster.find(it => it.id === p.itemId) && toNum(p.qty) > 0).forEach(plan => {
     const prog = st.progress[plan.id] || { preDone:0, postDone:{} };
     const myVal = dn ? toNum((prog.postDone || {})[dn]) : 0;
     const totalVal = Object.values(prog.postDone || {}).reduce((s,v) => s + toNum(v), 0);
     const qty = toNum(plan.qty);
-    rows.push({ plan, item: null, myVal, totalVal, qty, totalPct: qty > 0 ? Math.round(totalVal/qty*100) : 0, myPct: qty > 0 ? Math.round(myVal/qty*100) : 0 });
+    rows.push({ plan, item: null, myVal, totalVal, qty, totalPct: qty > 0 ? Math.round(totalVal/qty*100) : 0, myPct: qty > 0 ? Math.round(myVal/qty*100) : 0, name: '不明', color: '' });
   });
 
   if (!rows.length) {
@@ -925,8 +929,8 @@ function renderPersonal() {
   // ── 左カラム: 計画 ──────────────────────────────
   let planHtml = '';
   rows.forEach(r => {
-    const name = r.item ? r.item.name : '不明';
-    const color = r.item ? r.item.color : '';
+    const name = r.name;
+    const color = r.color;
     const isDone = r.qty > 0 && r.totalVal >= r.qty;
     const doneStyle = isDone ? 'opacity:0.5' : '';
     const priBadge = r.plan.priority ? '<span style="font-size:10px;color:#fb923c;background:#7c2d12;padding:1px 5px;border-radius:3px;margin-left:4px">優先</span>' : '';
@@ -951,8 +955,8 @@ function renderPersonal() {
     let inputHtml = '';
     rows.forEach(r => {
       const planId = r.plan.id;
-      const name = r.item ? r.item.name : '不明';
-      const color = r.item ? r.item.color : '';
+      const name = r.name;
+      const color = r.color;
       const isAchieved = r.qty > 0 && r.totalVal >= r.qty;
       const isUnlocked = !!_postUnlocked[planId];
       const isLocked = isAchieved && !isUnlocked;
@@ -1012,8 +1016,8 @@ function renderPersonal() {
   let totalHtml = '';
   let grandMyTotal = 0, grandQty = 0;
   rows.forEach(r => {
-    const name = r.item ? r.item.name : '不明';
-    const color = r.item ? r.item.color : '';
+    const name = r.name;
+    const color = r.color;
     // この端末の数量・達成率
     const myPct = r.myPct;
     const pctColor = myPct >= 100 ? 'var(--g)' : myPct >= 50 ? 'var(--b)' : 'var(--muted)';
@@ -1303,12 +1307,14 @@ function renderPlanList() {
   const groupMap = {};
   const groupOrder = [];
   st.itemMaster.forEach(it => {
-    if (!groupMap[it.name]) { groupMap[it.name] = []; groupOrder.push(it.name); }
+    const name = dispN(it);
+    if (!groupMap[name]) { groupMap[name] = []; groupOrder.push(name); }
   });
-  // マスターにない品目は末尾に
+  // マスターにない品目は末尾に・数量0は非表示
   st.plans.forEach(p => {
+    if (toNum(p.qty) === 0) return; // 数量0は非表示
     const item = st.itemMaster.find(it => it.id === p.itemId);
-    const name = item ? item.name : '不明';
+    const name = dispN(item) || '不明';
     if (!groupMap[name]) { groupMap[name] = []; groupOrder.push(name); }
     groupMap[name].push(p);
   });
@@ -1362,7 +1368,7 @@ function renderPlanList() {
       <div id="plangroup-${esc(groupName.replace(/\s/g,'_'))}" style="display:${isOpen?'block':'none'}">
         ${sorted.map(p => {
           const item = st.itemMaster.find(it => it.id === p.itemId);
-          const colorLabel = item ? item.color : p.itemId;
+          const colorLabel = dispC(item) || p.itemId;
           const prog = st.progress[p.id] || {};
           const preDone = toNum(prog.preDone);
           const postTotal = Object.values(prog.postDone||{}).reduce((s,v)=>s+toNum(v),0);
@@ -1959,7 +1965,9 @@ function importCsv(input) {
         prePh: toNum(cols[2]), postPh: toNum(cols[3]),
         sheetNo: cols[4]||'', cutW: cols[5]||'', cutL: cols[6]||'',
         group: cols[7] || 'その他',
-        price: parseFloat(cols[8]) || 0
+        price: parseFloat(cols[8]) || 0,
+        dispName:  cols[9]  || '',
+        dispColor: cols[10] || ''
       });
     });
     st.itemMaster = items;
@@ -2077,7 +2085,10 @@ function applyCloudData(json, forceShiftAttend) {
       id: String(it.id||''), name: String(it.name||''), color: String(it.color||''),
       prePh: toNum(it.prePh), postPh: toNum(it.postPh),
       sheetNo: String(it.sheetNo||''), cutW: String(it.cutW||''),
-      cutL: String(it.cutL||''), group: String(it.group||'その他')
+      cutL: String(it.cutL||''), group: String(it.group||'その他'),
+      price: parseFloat(it.price) || 0,
+      dispName:  String(it.dispName  || ''),
+      dispColor: String(it.dispColor || '')
     }));
   }
   if (Array.isArray(json.plans)) {
