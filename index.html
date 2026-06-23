@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <title>工場進捗管理【現場用】v5.0</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -268,7 +269,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
       </div>
       <div class="flex gap8" style="flex-wrap:wrap">
         <label style="flex:1;min-width:160px">
-          <input type="file" id="plan-csv-file" accept=".csv" onchange="importPlanCsv(this)"
+          <input type="file" id="plan-csv-file" accept=".csv,.xlsx" onchange="importPlanCsv(this)"
             style="font-size:13px;color:var(--text);width:100%">
         </label>
         <button class="btn-sm" onclick="downloadPlanCsvTemplate()" style="flex-shrink:0;white-space:nowrap">
@@ -347,8 +348,8 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 <div id="panel-items" class="panel">
   <div class="card mb12">
     <div class="card-title mb8">CSVインポート</div>
-    <div class="f12 text-muted mb8">列順: 品目名, カラー, 前工程時間(分/個), 後工程時間(分/個), シート品番, カット幅, カット長, グループ, 単価, 表示名, 表示カラー<br>※表示名・表示カラーは省略可（空欄時は品目名・カラーをそのまま使用）</div>
-    <input type="file" id="csv-file" accept=".csv" onchange="importCsv(this)" style="font-size:13px;color:var(--text)">
+    <div class="f12 text-muted mb8">列順: 品目名, カラー, 前工程時間(分/個), 後工程時間(分/個), シート品番, カット幅, カット長, グループ, 単価, 表示名, 表示カラー<br>※表示名・表示カラーは省略可（空欄時は品目名・カラーをそのまま使用）<br>※Excel（.xlsx）・CSV（.csv）どちらも対応。Excelは1シート目を読み込みます。</div>
+    <input type="file" id="csv-file" accept=".csv,.xlsx" onchange="importCsv(this)" style="font-size:13px;color:var(--text)">
   </div>
   <div id="item-list"></div>
 </div>
@@ -1112,13 +1113,27 @@ let _csvPendingZeroOverwrite = [];
 function importPlanCsv(input) {
   const file = input.files[0];
   if (!file) return;
+  const isXlsx = file.name.toLowerCase().endsWith('.xlsx');
   const reader = new FileReader();
   reader.onload = e => {
     _csvPendingZeroOverwrite = [];
-    _applyPlanCsv(e.target.result, false);
+    let csvText = '';
+    if (isXlsx) {
+      // ExcelをCSVテキストに変換して共通処理へ
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      csvText = XLSX.utils.sheet_to_csv(ws);
+    } else {
+      csvText = e.target.result;
+    }
+    _applyPlanCsv(csvText, false);
     input.value = '';
   };
-  reader.readAsText(file, 'UTF-8');
+  if (isXlsx) {
+    reader.readAsArrayBuffer(file);
+  } else {
+    reader.readAsText(file, 'UTF-8');
+  }
 }
 
 // forceZero=true のとき _csvPendingZeroOverwrite を強制適用
@@ -1996,23 +2011,39 @@ function renderItemList() {
 function importCsv(input) {
   const file = input.files[0];
   if (!file) return;
+  const isXlsx = file.name.toLowerCase().endsWith('.xlsx');
   const reader = new FileReader();
   reader.onload = e => {
-    const lines = e.target.result.split('\n').filter(l => l.trim());
+    let rows = [];
+    if (isXlsx) {
+      // Excelファイル：SheetJSで1シート目を読み込み
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    } else {
+      // CSVファイル
+      rows = e.target.result.split('\n')
+        .filter(l => l.trim())
+        .map(l => l.split(',').map(c => c.trim().replace(/^"|"$/g, '')));
+    }
     const items = [];
-    lines.forEach((line, idx) => {
-      if (idx === 0 && /品目名|name/i.test(line)) return; // ヘッダーをスキップ
-      const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g,''));
-      if (cols.length < 2 || !cols[0]) return;
+    rows.forEach((cols, idx) => {
+      // ヘッダー行をスキップ
+      if (idx === 0 && /品目名|name/i.test(String(cols[0]))) return;
+      if (!cols[0]) return;
       items.push({
         id: genId('it'),
-        name: cols[0], color: cols[1] || '',
-        prePh: toNum(cols[2]), postPh: toNum(cols[3]),
-        sheetNo: cols[4]||'', cutW: cols[5]||'', cutL: cols[6]||'',
-        group: cols[7] || 'その他',
-        price: parseFloat(cols[8]) || 0,
-        dispName:  cols[9]  || '',
-        dispColor: cols[10] || ''
+        name:     String(cols[0]  || ''),
+        color:    String(cols[1]  || ''),
+        prePh:    toNum(cols[2]),
+        postPh:   toNum(cols[3]),
+        sheetNo:  String(cols[4]  || ''),
+        cutW:     String(cols[5]  || ''),
+        cutL:     String(cols[6]  || ''),
+        group:    String(cols[7]  || 'その他'),
+        price:    parseFloat(cols[8]) || 0,
+        dispName:  String(cols[9]  || ''),
+        dispColor: String(cols[10] || '')
       });
     });
     st.itemMaster = items;
@@ -2022,7 +2053,11 @@ function importCsv(input) {
     alert(`${items.length}件インポートしました`);
     input.value = '';
   };
-  reader.readAsText(file, 'UTF-8');
+  if (isXlsx) {
+    reader.readAsArrayBuffer(file);
+  } else {
+    reader.readAsText(file, 'UTF-8');
+  }
 }
 
 // ============================================================
