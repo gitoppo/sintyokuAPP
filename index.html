@@ -836,35 +836,38 @@ function renderAlertBar(groups) {
   const cap = calcCycleCapacityRealtime();
   const needH = totalNeedMin / 60;
   const remH  = totalRemMin  / 60;
-  // 経過時間 = サイクル全体必要 - 残り必要
+  // 進捗済工数 = サイクル全体必要 - 残り必要
   const elapsedH = Math.max(0, needH - remH);
 
   if (!cap.totalHours) {
     bar.className = 'alert-gray';
     bar.innerHTML =
       `稼働未登録（⑤シフト・④勤怠で設定）` +
-      `　<span style="opacity:.7">｜ 必要稼働 ${fmtH(needH)}　経過 ${fmtH(elapsedH)}　残 ${fmtH(remH)}</span>`;
+      `　<span style="opacity:.7">｜ 必要稼働 ${fmtH(needH)}　進捗済 ${fmtH(elapsedH)}　必要残 ${fmtH(remH)}</span>`;
     return;
   }
 
+  // 余裕/不足 = サイクル全勤怠時間(固定) - 必要残工数
   const diff = cap.totalHours - remH;
   if (diff >= 0) {
     bar.className = 'alert-ok';
     bar.innerHTML =
       `✅ 余裕 ${fmtH(diff)}` +
-      `　<span style="opacity:.8">｜ 必要稼働 ${fmtH(needH)}　経過 ${fmtH(elapsedH)}　必要残 ${fmtH(remH)}</span>`;
+      `　<span style="opacity:.8">｜ 必要稼働 ${fmtH(needH)}　勤怠 ${fmtH(cap.totalHours)}　進捗済 ${fmtH(elapsedH)}　必要残 ${fmtH(remH)}</span>`;
   } else {
     bar.className = 'alert-ng';
     bar.innerHTML =
       `⚠️ 不足 ${fmtH(-diff)}` +
-      `　<span style="opacity:.9">｜ 必要稼働 ${fmtH(needH)}　経過 ${fmtH(elapsedH)}　必要残 ${fmtH(remH)}</span>`;
+      `　<span style="opacity:.9">｜ 必要稼働 ${fmtH(needH)}　勤怠 ${fmtH(cap.totalHours)}　進捗済 ${fmtH(elapsedH)}　必要残 ${fmtH(remH)}</span>`;
   }
 }
 
 function calcCycleCapacityRealtime() {
-  const { remainDays } = getCurrentCycle();
+  // サイクル全日の勤怠合計を固定値として使用
+  // （時間経過で減らさず、進捗との差だけで余裕/不足を判定する）
+  const { days } = getCurrentCycle();
   let totalH = 0;
-  remainDays.forEach(day => {
+  days.forEach(day => {
     const data = st.weeklyAttend[day];
     if (!Array.isArray(data)) return;
     data.forEach(m => { totalH += toNum(m.hours); });
