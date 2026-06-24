@@ -862,24 +862,12 @@ function renderAlertBar(groups) {
 }
 
 function calcCycleCapacityRealtime() {
-  const now = new Date();
-  const today = todayStr();
   const { remainDays } = getCurrentCycle();
   let totalH = 0;
   remainDays.forEach(day => {
     const data = st.weeklyAttend[day];
     if (!Array.isArray(data)) return;
-    if (day === today) {
-      data.forEach(m => {
-        if (!m.endTime) { totalH += toNum(m.hours); return; }
-        const [eh,em] = m.endTime.split(':').map(Number);
-        const endMin = eh*60+em;
-        const nowMin = now.getHours()*60+now.getMinutes();
-        totalH += Math.max(0, endMin - nowMin) / 60;
-      });
-    } else {
-      data.forEach(m => { totalH += toNum(m.hours); });
-    }
+    data.forEach(m => { totalH += toNum(m.hours); });
   });
   return { totalHours: totalH };
 }
