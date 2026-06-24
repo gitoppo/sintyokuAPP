@@ -2221,22 +2221,32 @@ function applyCloudData(json, forceShiftAttend) {
   }
   if (json.progress && typeof json.progress === 'object') {
     const dn = st.deviceName;
+    // 自端末の現在の入力値を退避
+    const myLocalValues = {};
+    if (dn) {
+      Object.entries(st.progress).forEach(([k, v]) => {
+        const myVal = toNum((v.postDone||{})[dn]);
+        if (myVal > 0) myLocalValues[k] = myVal;
+      });
+    }
+    // クラウドデータをそのまま反映（他端末の最新データを正しく取得）
+    st.progress = {};
     Object.entries(json.progress).forEach(([k,v]) => {
-      const cloud = v.postDone || {};
-      // 自端末のローカル値（送信済みのはずだがネットワーク遅延で未反映の可能性）
-      const localVal = dn && st.progress[k] ? toNum((st.progress[k].postDone||{})[dn]) : 0;
-      const cloudVal = dn ? toNum(cloud[dn]||0) : 0;
-      // クラウドを基本とし、自端末はローカルとクラウドの大きい方を採用
-      // （自端末の入力がクラウドに反映される前にポーリングで上書きされるのを防ぐ）
-      const mergedPostDone = Object.assign({}, cloud);
-      if (dn) mergedPostDone[dn] = Math.max(localVal, cloudVal);
       st.progress[k] = {
         preDone: toNum(v.preDone),
-        postDone: mergedPostDone
+        postDone: Object.assign({}, v.postDone || {})
       };
     });
-    // クラウドに存在しないplanIdのprogressはローカルから削除しない
-    // （送信中・未反映のデータを保護するため）
+    // 自端末の値：クラウドより大きければローカルを優先（未送信の入力を保護）
+    if (dn) {
+      Object.entries(myLocalValues).forEach(([k, localVal]) => {
+        if (!st.progress[k]) st.progress[k] = { preDone:0, postDone:{} };
+        const cloudVal = toNum((st.progress[k].postDone||{})[dn]);
+        if (localVal > cloudVal) {
+          st.progress[k].postDone[dn] = localVal;
+        }
+      });
+    }
   }
   if (forceShiftAttend && json.shiftAttend) {
     if (Array.isArray(json.shiftAttend.baseShift)) st.baseShift = json.shiftAttend.baseShift;
