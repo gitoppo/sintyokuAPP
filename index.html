@@ -2272,9 +2272,26 @@ async function pullFromCloud() {
 
 // ポーリング
 let _cloudSaveTimer = null;
-function debouncedCloudSave() {
+async function debouncedCloudSave() {
   clearTimeout(_cloudSaveTimer);
-  _cloudSaveTimer = setTimeout(() => {
+  _cloudSaveTimer = setTimeout(async () => {
+    const dn = st.deviceName;
+    // 送信前にクラウドの最新progressを取得してマージ
+    // （他端末が入力した値を上書きしないようにする）
+    try {
+      const json = await Cloud.get();
+      if (json && json.ok && json.progress && typeof json.progress === 'object') {
+        Object.entries(json.progress).forEach(([k, v]) => {
+          if (!st.progress[k]) st.progress[k] = { preDone:0, postDone:{} };
+          const cloudPostDone = v.postDone || {};
+          const localVal = dn ? toNum((st.progress[k].postDone||{})[dn]) : 0;
+          // 他端末のデータはクラウドから取得・自端末はローカル優先
+          st.progress[k].postDone = Object.assign({}, cloudPostDone);
+          if (dn) st.progress[k].postDone[dn] = localVal;
+          // preDoneはローカルを優先（前工程は1端末で管理）
+        });
+      }
+    } catch(e) { /* ネットワークエラー時はそのまま送信 */ }
     Cloud.savePlansProgress(null, null);
   }, 2000);
 }
