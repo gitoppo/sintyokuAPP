@@ -863,14 +863,39 @@ function renderAlertBar(groups) {
 }
 
 function calcCycleCapacityRealtime() {
-  // サイクル全日の勤怠合計を固定値として使用
-  // （時間経過で減らさず、進捗との差だけで余裕/不足を判定する）
-  const { days } = getCurrentCycle();
+  // 勤怠残時間を返す
+  // ・過去日（今日より前）: 除外（経過済み）
+  // ・今日: 全メンバーが終業済みなら0、1人でも未終業なら登録値(m.hours)をそのまま使用
+  // ・未来日: 登録値(m.hours)をそのまま使用
+  // ※時間経過で自動減少させず、終業時刻を過ぎた時点で0に切り替える
+  const today = todayStr();
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const { remainDays } = getCurrentCycle(); // 今日以降の稼働日
   let totalH = 0;
-  days.forEach(day => {
+  remainDays.forEach(day => {
     const data = st.weeklyAttend[day];
     if (!Array.isArray(data)) return;
-    data.forEach(m => { totalH += toNum(m.hours); });
+    if (day === today) {
+      // 今日: メンバーごとに終業済みか判定
+      data.forEach(m => {
+        if (!m.endTime) {
+          // 終業時刻未登録 → 登録値をそのまま使用
+          totalH += toNum(m.hours);
+          return;
+        }
+        const [eh, em] = m.endTime.split(':').map(Number);
+        const endMin = eh * 60 + em;
+        if (nowMin < endMin) {
+          // まだ終業前 → 登録値をそのまま使用（時間経過で減らさない）
+          totalH += toNum(m.hours);
+        }
+        // 終業済み → 0（カウントしない）
+      });
+    } else {
+      // 未来日 → 登録値をそのまま使用
+      data.forEach(m => { totalH += toNum(m.hours); });
+    }
   });
   return { totalHours: totalH };
 }
