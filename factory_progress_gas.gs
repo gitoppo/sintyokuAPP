@@ -1,5 +1,5 @@
 // ============================================================
-// 工場進捗管理 GAS サーバー v5.0
+// 工場進捗管理 GAS サーバー v5.1
 // ============================================================
 
 function doGet(e) {
@@ -18,12 +18,12 @@ function doPost(e) {
   try {
     const p = JSON.parse(e.postData.contents);
     const action = p.action || '';
-    if (action === 'saveItemMaster')    return saveItemMaster_(p);
-    if (action === 'savePlansProgress') return savePlansProgress_(p);
+    if (action === 'saveItemMaster')      return saveItemMaster_(p);
+    if (action === 'savePlansProgress')   return savePlansProgress_(p);
     if (action === 'saveShiftAttendance') return saveShiftAttendance_(p);
-    if (action === 'saveOperationLog')  return saveOperationLog_(p);
-    if (action === 'saveAll')           return saveAll_(p);
-    if (action === 'saveShipping')       return saveShipping_(p);
+    if (action === 'saveOperationLog')    return saveOperationLog_(p);
+    if (action === 'saveAll')             return saveAll_(p);
+    if (action === 'saveShipping')        return saveShipping_(p);
     return errRes('unknown action: ' + action);
   } catch (ex) {
     return errRes(ex.message);
@@ -54,12 +54,37 @@ function saveItemMaster_(p) {
 }
 
 // ============================================================
-// plans + progress
+// plans + progress（v5.1: progressはマージ保存）
 // ============================================================
 function savePlansProgress_(p) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // plans は全件上書き（計画管理は1端末で行うため）
   writePlansSheet_(ss, p.plans || []);
-  writeProgressSheet_(ss, p.progress || {});
+
+  // progress はマージ保存（複数端末の同時入力を保護）
+  const current = readProgressSheet_(ss);
+  const incoming = p.progress || {};
+
+  Object.keys(incoming).forEach(function(planId) {
+    var val = incoming[planId];
+    if (!current[planId]) {
+      // 新規planId → そのまま追加
+      current[planId] = {
+        preDone:  val.preDone || 0,
+        postDone: val.postDone || {}
+      };
+    } else {
+      // 既存planId → preDoneは上書き、postDoneは端末名キー単位でマージ
+      current[planId].preDone = val.preDone || 0;
+      var incomingPostDone = val.postDone || {};
+      Object.keys(incomingPostDone).forEach(function(deviceName) {
+        current[planId].postDone[deviceName] = incomingPostDone[deviceName];
+      });
+    }
+  });
+
+  writeProgressSheet_(ss, current);
   return ok({});
 }
 
@@ -112,9 +137,26 @@ function saveOperationLog_(p) {
 // ============================================================
 function saveAll_(p) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  if (p.itemMaster)   writeJsonSheet_(ss, 'itemMaster', p.itemMaster);
-  if (p.plans)        writePlansSheet_(ss, p.plans);
-  if (p.progress)     writeProgressSheet_(ss, p.progress);
+  if (p.itemMaster) writeJsonSheet_(ss, 'itemMaster', p.itemMaster);
+  if (p.plans)      writePlansSheet_(ss, p.plans);
+  if (p.progress) {
+    // saveAllもマージ保存
+    const current = readProgressSheet_(ss);
+    const incoming = p.progress;
+    Object.keys(incoming).forEach(function(planId) {
+      var val = incoming[planId];
+      if (!current[planId]) {
+        current[planId] = { preDone: val.preDone || 0, postDone: val.postDone || {} };
+      } else {
+        current[planId].preDone = val.preDone || 0;
+        var incomingPostDone = val.postDone || {};
+        Object.keys(incomingPostDone).forEach(function(deviceName) {
+          current[planId].postDone[deviceName] = incomingPostDone[deviceName];
+        });
+      }
+    });
+    writeProgressSheet_(ss, current);
+  }
   if (p.baseShift !== undefined || p.weeklyAttend !== undefined) {
     saveShiftAttendance_({ baseShift: p.baseShift || [], weeklyAttend: p.weeklyAttend || {} });
   }
@@ -251,6 +293,10 @@ function ok(data) {
 function errRes(msg) {
   return ContentService.createTextOutput(JSON.stringify({ ok: false, error: msg })).setMimeType(ContentService.MimeType.JSON);
 }
+
+// ============================================================
+// 事務用（factory_shipping.html）
+// ============================================================
 function getShipping_() {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -259,7 +305,7 @@ function getShipping_() {
       sheet = ss.insertSheet('deliveryHistory');
       sheet.appendRow(['id','timestamp','deviceName','deliveryNo','memo','palletsJson','shippingDate']);
     }
-const rows = sheet.getDataRange().getValues();
+    const rows = sheet.getDataRange().getValues();
     const headers = rows[0];
     const records = rows.slice(1).map(row => {
       const obj = {};
@@ -275,6 +321,7 @@ const rows = sheet.getDataRange().getValues();
       .setMimeType(ContentService.MimeType.JSON);
   }
 }
+
 function saveShipping_(p) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -282,8 +329,8 @@ function saveShipping_(p) {
     if (!sheet) {
       sheet = ss.insertSheet('deliveryHistory');
       sheet.appendRow(['id','timestamp','deviceName','deliveryNo','memo','palletsJson','shippingDate']);
-    }  
- const records = p.records || [];
+    }
+    const records = p.records || [];
     records.forEach(r => {
       sheet.appendRow([
         r.id || '',
@@ -295,7 +342,7 @@ function saveShipping_(p) {
         r.shippingDate || ''
       ]);
     });
-return ContentService
+    return ContentService
       .createTextOutput(JSON.stringify({ ok: true }))
       .setMimeType(ContentService.MimeType.JSON);
   } catch(err) {
