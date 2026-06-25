@@ -556,6 +556,23 @@ function renderAll() {
 function todayStr() {
   return sanitizeDateStr(new Date().toLocaleDateString('sv-SE'));
 }
+
+// postDoneの合計を計算する共通関数
+// 同じ端末の旧キー（端末名のみ）と新キー（端末名_日付）が両方ある場合は新キーを優先
+function calcPostTotal(postDone) {
+  if (!postDone) return 0;
+  const entries = Object.entries(postDone);
+  const hasNewKey = new Set();
+  entries.forEach(([k]) => {
+    const m = k.match(/^(.+)_(\d{4}-\d{2}-\d{2})$/);
+    if (m) hasNewKey.add(m[1]);
+  });
+  return entries.reduce((s, [k, v]) => {
+    const isOldKey = !k.match(/^(.+)_(\d{4}-\d{2}-\d{2})$/);
+    if (isOldKey && hasNewKey.has(k)) return s;
+    return s + toNum(v);
+  }, 0);
+}
 function sanitizeDateStr(s) {
   if (!s) return '';
   const m = String(s).match(/(\d{4})[-\/年](\d{1,2})[-\/月](\d{1,2})/);
@@ -639,7 +656,7 @@ function renderProgress() {
   function isGroupComplete(g) {
     return g.plans.every(p => {
       const prog = st.progress[p.id];
-      const postTotal = prog ? Object.values(prog.postDone||{}).reduce((s,v)=>s+toNum(v),0) : 0;
+      const postTotal = prog ? calcPostTotal(prog.postDone) : 0;
       return postTotal >= toNum(p.qty) && toNum(p.qty) > 0;
     });
   }
@@ -707,7 +724,7 @@ function renderPreGroupHTML(g, _done, _cardStyle, _badge) {
   const postRows = g.plans.map(p => {
     const item = st.itemMaster.find(it => it.id === p.itemId);
     const prog = st.progress[p.id];
-    const postTotal = prog ? Object.values(prog.postDone || {}).reduce((s,v) => s + toNum(v), 0) : 0;
+    const postTotal = prog ? calcPostTotal(prog.postDone) : 0;
     const qty = toNum(p.qty);
     const pct = qty > 0 ? Math.min(100, Math.round(postTotal / qty * 100)) : 0;
     const remainPostMin = Math.max(0, qty - postTotal) * (item ? toNum(item.postPh) : 0);
@@ -834,7 +851,7 @@ function renderAlertBar(groups) {
       if (!item) return;
       const prog = st.progress[p.id];
       const preDone = prog ? toNum(prog.preDone) : 0;
-      const postTotal = prog ? Object.values(prog.postDone||{}).reduce((s,v)=>s+toNum(v),0) : 0;
+      const postTotal = prog ? calcPostTotal(prog.postDone) : 0;
       totalRemMin += Math.max(0, toNum(p.qty) - preDone) * toNum(item.prePh);
       totalRemMin += Math.max(0, toNum(p.qty) - postTotal) * toNum(item.postPh);
     });
@@ -947,10 +964,16 @@ function renderPersonal() {
       const dayKey = dn ? dn + '_' + todayStr() : null;
       const myVal = dayKey ? toNum((prog.postDone || {})[dayKey]) : 0;
       // 累計: この端末の全日付分を合計（右カラム）
+      // この端末の累計: 旧キー(端末名のみ)と新キー(端末名_日付)が両方ある場合は新キーのみ
       const myTotalVal = dn ? Object.entries(prog.postDone || {}).reduce((s, [k, v]) => {
-        return k === dn || k.startsWith(dn + '_') ? s + toNum(v) : s;
+        if (k === dn) {
+          // 旧キー: 新キーが存在する場合はスキップ
+          const hasNew = Object.keys(prog.postDone || {}).some(nk => nk.startsWith(dn + '_'));
+          return hasNew ? s : s + toNum(v);
+        }
+        return k.startsWith(dn + '_') ? s + toNum(v) : s;
       }, 0) : 0;
-      const totalVal = Object.values(prog.postDone || {}).reduce((s,v) => s + toNum(v), 0);
+      const totalVal = calcPostTotal(prog.postDone);
       const qty = toNum(plan.qty);
       const totalPct = qty > 0 ? Math.round(totalVal / qty * 100) : 0;
       const myPct = qty > 0 ? Math.round(myVal / qty * 100) : 0;
@@ -966,8 +989,14 @@ function renderPersonal() {
     const prog = st.progress[plan.id] || { preDone:0, postDone:{} };
     const dayKey2 = dn ? dn + '_' + todayStr() : null;
     const myVal = dayKey2 ? toNum((prog.postDone || {})[dayKey2]) : 0;
-    const myTotalVal = dn ? Object.entries(prog.postDone || {}).reduce((s,[k,v]) => k===dn||k.startsWith(dn+'_') ? s+toNum(v) : s, 0) : 0;
-    const totalVal = Object.values(prog.postDone || {}).reduce((s,v) => s + toNum(v), 0);
+    const myTotalVal = dn ? Object.entries(prog.postDone || {}).reduce((s, [k, v]) => {
+      if (k === dn) {
+        const hasNew = Object.keys(prog.postDone || {}).some(nk => nk.startsWith(dn + '_'));
+        return hasNew ? s : s + toNum(v);
+      }
+      return k.startsWith(dn + '_') ? s + toNum(v) : s;
+    }, 0) : 0;
+    const totalVal = calcPostTotal(prog.postDone);
     const qty = toNum(plan.qty);
     const myTotalPct = qty > 0 ? Math.round(myTotalVal/qty*100) : 0;
     rows.push({ plan, item: null, myVal, myTotalVal, totalVal, qty, totalPct: qty > 0 ? Math.round(totalVal/qty*100) : 0, myPct: qty > 0 ? Math.round(myVal/qty*100) : 0, myTotalPct, name: '不明', color: '' });
@@ -1251,7 +1280,7 @@ function _applyPlanCsv(csvText, forceZero) {
       const existingList = st.plans.filter(p => p.itemId === item.id);
       const existing = existingList.find(p => {
         const prog = st.progress[p.id] || { postDone: {} };
-        const postTotal = Object.values(prog.postDone || {}).reduce((s,v) => s + toNum(v), 0);
+        const postTotal = calcPostTotal(prog.postDone);
         // 完了済み（数量>0かつ後工程合計>=数量）はスキップ
         if (toNum(p.qty) > 0 && postTotal >= toNum(p.qty)) return false;
         return true; // 未完了（数量0含む）
@@ -1260,7 +1289,7 @@ function _applyPlanCsv(csvText, forceZero) {
       if (existing && qty === 0) {
         // 数量0 × 進捗あり → 確認待ちバッファへ
         const prog = st.progress[existing.id] || { postDone: {} };
-        const postTotal = Object.values(prog.postDone || {}).reduce((s,v) => s + toNum(v), 0);
+        const postTotal = calcPostTotal(prog.postDone);
         if (postTotal > 0) {
           zeroWithProgress.push({ name: rawName, color: rawColor, postTotal, existing, qty, date, memo, priority });
           _csvPendingZeroOverwrite.push({ existing, qty, date, memo, priority });
@@ -1379,7 +1408,7 @@ function renderPlanList() {
   // 完了済みバーの表示制御
   const completedIds = st.plans.filter(p => {
     const prog = st.progress[p.id] || {};
-    const postTotal = Object.values(prog.postDone||{}).reduce((s,v)=>s+toNum(v),0);
+    const postTotal = calcPostTotal(prog.postDone);
     return postTotal >= toNum(p.qty) && toNum(p.qty) > 0;
   }).map(p => p.id);
   const bulkBar = document.getElementById('plan-bulk-bar');
@@ -1428,7 +1457,7 @@ function renderPlanList() {
     // グループ完了判定（全planが完了）
     const isGroupDone = sorted.every(p => {
       const prog = st.progress[p.id] || {};
-      const postTotal = Object.values(prog.postDone||{}).reduce((s,v)=>s+toNum(v),0);
+      const postTotal = calcPostTotal(prog.postDone);
       return toNum(p.qty) > 0 && postTotal >= toNum(p.qty);
     });
 
@@ -1436,7 +1465,7 @@ function renderPlanList() {
     const groupTotalQty = sorted.reduce((s,p) => s + toNum(p.qty), 0);
     const groupPostTotal = sorted.reduce((s,p) => {
       const prog = st.progress[p.id] || {};
-      return s + Object.values(prog.postDone||{}).reduce((ss,v)=>ss+toNum(v),0);
+      return s + calcPostTotal(prog.postDone);
     }, 0);
 
     // 開閉状態: 初回は完了グループを閉じる
@@ -1465,7 +1494,7 @@ function renderPlanList() {
           const colorLabel = dispC(item) || p.itemId;
           const prog = st.progress[p.id] || {};
           const preDone = toNum(prog.preDone);
-          const postTotal = Object.values(prog.postDone||{}).reduce((s,v)=>s+toNum(v),0);
+          const postTotal = calcPostTotal(prog.postDone);
           const qty = toNum(p.qty);
           const isDone = qty > 0 && postTotal >= qty;
           const doneStyle = isDone ? 'opacity:0.5;' : '';
@@ -1604,7 +1633,7 @@ function confirmResetAllPlans() {
 function askDeleteCompleted() {
   const completed = st.plans.filter(p => {
     const prog = st.progress[p.id] || {};
-    const postTotal = Object.values(prog.postDone||{}).reduce((s,v)=>s+toNum(v),0);
+    const postTotal = calcPostTotal(prog.postDone);
     return postTotal >= toNum(p.qty) && toNum(p.qty) > 0;
   });
   if (!completed.length) { alert('完了済みの計画はありません'); return; }
@@ -1623,7 +1652,7 @@ function askDeleteCompleted() {
 function confirmDeleteCompleted() {
   const completedIds = st.plans.filter(p => {
     const prog = st.progress[p.id] || {};
-    const postTotal = Object.values(prog.postDone||{}).reduce((s,v)=>s+toNum(v),0);
+    const postTotal = calcPostTotal(prog.postDone);
     return postTotal >= toNum(p.qty) && toNum(p.qty) > 0;
   }).map(p => p.id);
 
