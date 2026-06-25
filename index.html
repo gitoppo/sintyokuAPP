@@ -149,12 +149,11 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 .post-num-input{flex:1;min-width:0;height:52px;text-align:center;font-size:22px;font-weight:700;border:1px solid var(--border);border-radius:9px;background:var(--faint);color:var(--text)}
 /* 達成ロック */
 .post-input-item.achieved{background:#0a1a0a}
-.post-input-item.achieved-over{background:#1a0d00}
 .post-num-input:disabled{opacity:0.5;cursor:not-allowed}
 .post-adj-btn:disabled{opacity:0.3;cursor:not-allowed}
-.achieved-banner{font-size:12px;font-weight:700;color:var(--g);background:#052e16;border:1px solid var(--g2);border-radius:5px;padding:4px 8px;text-align:center;margin-bottom:6px}
-.over-banner{font-size:12px;font-weight:700;color:var(--y);background:#1c1000;border:1px solid #854d0e;border-radius:5px;padding:4px 8px;text-align:center;margin-bottom:6px}
-.unlock-btn{font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid var(--y);background:transparent;color:var(--y);cursor:pointer;width:100%;margin-top:4px}
+.personal-group-header{padding:12px 16px;display:flex;align-items:center;gap:10px;background:#131c2e;border-bottom:1px solid var(--border);cursor:pointer;user-select:none}
+.personal-group-name{font-size:18px;font-weight:700;flex:1}
+.personal-group-stats{font-size:14px;color:var(--muted)}
 /* 合計カラム */
 .total-col-item{padding:10px 10px 8px;border-bottom:1px solid #0d1520}
 .total-col-item:last-child{border-bottom:none}
@@ -936,12 +935,7 @@ function fmtH(h) {
 // ============================================================
 
 // planId単位のロック解除状態（端末ローカル・ページ再読込でリセット）
-const _postUnlocked = {};
-
-function unlockPost(planId) {
-  _postUnlocked[planId] = true;
-  renderPersonal();
-}
+const _personalGroupOpen = {};
 
 function renderPersonal() {
   const dn = st.deviceName;
@@ -957,17 +951,13 @@ function renderPersonal() {
   // 品目マスター登録順でplanをまとめる
   const rows = [];
   st.itemMaster.forEach(masterItem => {
-    const matchPlans = st.plans.filter(p => p.itemId === masterItem.id && toNum(p.qty) > 0); // 数量0は非表示
+    const matchPlans = st.plans.filter(p => p.itemId === masterItem.id && toNum(p.qty) > 0);
     matchPlans.forEach(plan => {
       const prog = st.progress[plan.id] || { preDone:0, postDone:{} };
-      // 今日分: 端末名_今日の日付キー（中央カラム・今日の入力）
       const dayKey = dn ? dn + '_' + todayStr() : null;
       const myVal = dayKey ? toNum((prog.postDone || {})[dayKey]) : 0;
-      // 累計: この端末の全日付分を合計（右カラム）
-      // この端末の累計: 旧キー(端末名のみ)と新キー(端末名_日付)が両方ある場合は新キーのみ
       const myTotalVal = dn ? Object.entries(prog.postDone || {}).reduce((s, [k, v]) => {
         if (k === dn) {
-          // 旧キー: 新キーが存在する場合はスキップ
           const hasNew = Object.keys(prog.postDone || {}).some(nk => nk.startsWith(dn + '_'));
           return hasNew ? s : s + toNum(v);
         }
@@ -975,16 +965,13 @@ function renderPersonal() {
       }, 0) : 0;
       const totalVal = calcPostTotal(prog.postDone);
       const qty = toNum(plan.qty);
-      const totalPct = qty > 0 ? Math.round(totalVal / qty * 100) : 0;
-      const myPct = qty > 0 ? Math.round(myVal / qty * 100) : 0;
-      const myTotalPct = qty > 0 ? Math.round(myTotalVal / qty * 100) : 0;
-      // 表示名・表示カラーを優先
       const name  = dispN(masterItem);
       const color = dispC(masterItem);
-      rows.push({ plan, item: masterItem, myVal, myTotalVal, totalVal, qty, totalPct, myPct, myTotalPct, name, color });
+      const groupName = masterItem.groupName || name;
+      rows.push({ plan, item: masterItem, myVal, myTotalVal, totalVal, qty, name, color, groupName });
     });
   });
-  // マスターに存在しないplanも末尾に（念のため）・数量0は除外
+  // マスターに存在しないplanも末尾に
   st.plans.filter(p => !st.itemMaster.find(it => it.id === p.itemId) && toNum(p.qty) > 0).forEach(plan => {
     const prog = st.progress[plan.id] || { preDone:0, postDone:{} };
     const dayKey2 = dn ? dn + '_' + todayStr() : null;
@@ -998,8 +985,7 @@ function renderPersonal() {
     }, 0) : 0;
     const totalVal = calcPostTotal(prog.postDone);
     const qty = toNum(plan.qty);
-    const myTotalPct = qty > 0 ? Math.round(myTotalVal/qty*100) : 0;
-    rows.push({ plan, item: null, myVal, myTotalVal, totalVal, qty, totalPct: qty > 0 ? Math.round(totalVal/qty*100) : 0, myPct: qty > 0 ? Math.round(myVal/qty*100) : 0, myTotalPct, name: '不明', color: '' });
+    rows.push({ plan, item: null, myVal, myTotalVal, totalVal, qty, name: plan.name || '不明', color: plan.color || '', groupName: plan.name || '不明' });
   });
 
   if (!rows.length) {
@@ -1010,123 +996,145 @@ function renderPersonal() {
     return;
   }
 
-  // ── 左カラム: 計画 ──────────────────────────────
-  let planHtml = '';
+  // グループ単位でまとめる
+  const groups = [];
+  const groupMap = {};
   rows.forEach(r => {
-    const name = r.name;
-    const color = r.color;
-    const isDone = r.qty > 0 && r.totalVal >= r.qty;
-    const doneStyle = isDone ? 'opacity:0.5' : '';
-    const priBadge = r.plan.priority ? '<span style="font-size:10px;color:#fb923c;background:#7c2d12;padding:1px 5px;border-radius:3px;margin-left:4px">優先</span>' : '';
-    const doneBadge = isDone ? '<span style="font-size:10px;color:#64748b;background:#1e293b;padding:1px 5px;border-radius:3px;margin-left:4px">✓完了</span>' : '';
-    planHtml += `<div class="plan-col-item" style="${doneStyle}">
-      <div class="plan-col-name">${esc(name)}${priBadge}${doneBadge}</div>
-      <div class="plan-col-color">${esc(color)}</div>
-      <div class="plan-col-qty">${r.qty}個</div>
-      <div class="plan-col-date">${fmtDate(r.plan.date)}${r.plan.memo ? '　'+esc(r.plan.memo) : ''}</div>
-    </div>`;
+    const gn = r.groupName;
+    if (!groupMap[gn]) {
+      groupMap[gn] = { name: gn, rows: [] };
+      groups.push(groupMap[gn]);
+    }
+    groupMap[gn].rows.push(r);
   });
-  planListEl.innerHTML = planHtml;
 
-  // ── 中央カラム: 今日の進捗入力 ──────────────────
-  // フォーカス中は innerHTML 全書換えしない
+  // フォーカス中は中央カラムを書き換えない
   const focusedInInput = (() => {
     const a = document.activeElement;
     return a && (a.classList.contains('post-num-input') || a.classList.contains('post-adj-btn'));
   })();
 
-  if (!focusedInInput) {
-    let inputHtml = '';
-    rows.forEach(r => {
-      const planId = r.plan.id;
-      const name = r.name;
-      const color = r.color;
-      const isAchieved = r.qty > 0 && r.totalVal >= r.qty;
-      const isUnlocked = !!_postUnlocked[planId];
-      const isLocked = isAchieved && !isUnlocked;
-      const isOver = r.totalVal > r.qty && r.qty > 0;
+  let planHtml = '', inputHtml = '', totalHtml = '';
+  let grandMyTotal = 0, grandQty = 0;
 
-      // 色
-      const myValColor = r.myPct >= 100 ? 'var(--g)' : r.myPct >= 50 ? 'var(--b)' : 'var(--text)';
-      const totalPctColor = r.totalPct >= 100 ? 'var(--g)' : r.totalPct >= 50 ? 'var(--b)' : 'var(--muted)';
+  groups.forEach(g => {
+    // グループの開閉状態（デフォルト: 開く）
+    if (_personalGroupOpen[g.name] === undefined) _personalGroupOpen[g.name] = true;
+    const isOpen = _personalGroupOpen[g.name];
+    const chevron = isOpen ? '▼' : '▶';
 
-      // 達成バナー
-      let bannerHtml = '';
-      if (isOver && isUnlocked) {
-        bannerHtml = `<div class="over-banner">⚠️ 超過中 全端末${r.totalVal}/${r.qty}個（${r.totalPct}%）</div>`;
-      } else if (isAchieved && isUnlocked) {
-        bannerHtml = `<div class="over-banner">🔓 ロック解除中 全端末${r.totalVal}/${r.qty}個</div>`;
-      } else if (isAchieved) {
-        bannerHtml = `<div class="achieved-banner">✅ 達成済 全端末${r.totalVal}/${r.qty}個（${r.totalPct}%）</div>`;
-      }
+    // グループ集計
+    const gTotalVal  = g.rows.reduce((s,r) => s + r.totalVal, 0);
+    const gQty       = g.rows.reduce((s,r) => s + r.qty, 0);
+    const gMyTotal   = g.rows.reduce((s,r) => s + r.myTotalVal, 0);
+    const gPct       = gQty > 0 ? Math.round(gTotalVal / gQty * 100) : 0;
+    const gPctColor  = gPct >= 100 ? 'var(--g)' : gPct >= 50 ? 'var(--b)' : 'var(--muted)';
 
-      // ロック解除ボタン
-      const unlockBtnHtml = isAchieved && !isUnlocked
-        ? `<button class="unlock-btn" onclick="unlockPost('${planId}')">🔓 ロック解除（次週ストック）</button>`
-        : '';
+    // ── 左カラム グループヘッダー ──
+    planHtml += `<div class="personal-group-header" onclick="togglePersonalGroup('${esc(g.name)}')">
+      <span style="font-size:13px;color:var(--muted)">${chevron}</span>
+      <span class="personal-group-name">${esc(g.name)}</span>
+      <span class="personal-group-stats" style="color:${gPctColor}">全端末 ${gTotalVal}/${gQty}個</span>
+    </div>`;
 
-      // 全端末合計（inputHeader内で直接描画）
-      const totalBadge = '';
+    // ── 中央カラム グループヘッダー ──
+    inputHtml += `<div class="personal-group-header" onclick="togglePersonalGroup('${esc(g.name)}')">
+      <span style="font-size:13px;color:var(--muted)">${chevron}</span>
+      <span class="personal-group-name">${esc(g.name)}</span>
+      <span class="personal-group-stats" style="color:${gPctColor}">全端末 ${gTotalVal}/${gQty}個</span>
+    </div>`;
 
-      const itemBgClass = isOver ? 'achieved-over' : (isAchieved ? 'achieved' : '');
-      const borderColor = isLocked ? 'border:1px solid var(--g2)' : (isOver ? 'border:1px solid #854d0e' : '');
+    // ── 右カラム グループヘッダー ──
+    totalHtml += `<div class="personal-group-header" onclick="togglePersonalGroup('${esc(g.name)}')">
+      <span style="font-size:13px;color:var(--muted)">${chevron}</span>
+      <span class="personal-group-name">${esc(g.name)}</span>
+      <span class="personal-group-stats">累計 ${gMyTotal}個</span>
+    </div>`;
 
-      inputHtml += `<div class="post-input-item ${itemBgClass}" style="${borderColor}">
-        <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:6px;flex-wrap:wrap">
-          <span style="font-size:18px;font-weight:700;color:var(--text)">${esc(name)}</span>
-          <span style="font-size:18px;color:var(--muted)">${esc(color)}</span>
-        </div>
-        ${bannerHtml}
-        <div class="post-adj-row">
-          <button class="post-adj-btn" onclick="adjustPost('${planId}',-1)" ${isLocked ? 'disabled' : ''}>－</button>
-          <input class="post-num-input" type="number" id="post-inp-${planId}"
-            value="${r.myVal}" min="0"
-            style="color:${myValColor}"
-            ${isLocked ? 'disabled' : ''}
-            onchange="setPost('${planId}',this.value)">
-          <button class="post-adj-btn" onclick="adjustPost('${planId}',1)" ${isLocked ? 'disabled' : ''}>＋</button>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;flex-wrap:wrap;gap:4px">
-          ${!isAchieved ? `<span style="font-size:13px;font-weight:700;color:#f87171">全端末: <span style="font-size:15px">${r.totalVal}</span>/<span style="color:var(--b)">${r.qty}個</span> ${r.totalPct}%</span>` : ''}
-          <span style="font-size:13px;font-weight:700;color:#fbbf24;margin-left:auto">この端末: <span style="font-size:15px">${r.myVal}</span>個 ${r.myPct}%</span>
-        </div>
-        ${unlockBtnHtml}
+    const displayStyle = isOpen ? '' : 'display:none';
+
+    // ── 左カラム: 品目リスト ──
+    planHtml += `<div id="personal-plan-group-${esc(g.name)}" style="${displayStyle}">`;
+    g.rows.forEach(r => {
+      const isDone = r.qty > 0 && r.totalVal >= r.qty;
+      const doneStyle = isDone ? 'opacity:0.5' : '';
+      const priBadge = r.plan.priority ? '<span style="font-size:10px;color:#fb923c;background:#7c2d12;padding:1px 5px;border-radius:3px;margin-left:4px">優先</span>' : '';
+      const doneBadge = isDone ? '<span style="font-size:10px;color:#64748b;background:#1e293b;padding:1px 5px;border-radius:3px;margin-left:4px">✓完了</span>' : '';
+      planHtml += `<div class="plan-col-item" style="${doneStyle}">
+        <div class="plan-col-name">${esc(r.name)}${priBadge}${doneBadge}</div>
+        <div class="plan-col-color">${esc(r.color)}</div>
+        <div class="plan-col-qty">${r.qty}個</div>
+        <div class="plan-col-date">${fmtDate(r.plan.date)}${r.plan.memo ? '　'+esc(r.plan.memo) : ''}</div>
       </div>`;
     });
-    inputListEl.innerHTML = inputHtml || '<div class="text-muted f12" style="padding:8px">計画なし</div>';
-  }
+    planHtml += '</div>';
 
-  // ── 右カラム: 累計（この端末の全日付合計） ──────────────────
-  let totalHtml = '';
-  let grandMyTotal = 0, grandQty = 0;
-  rows.forEach(r => {
-    const name = r.name;
-    const color = r.color;
-    // この端末の累計（全日付分）・達成率
-    const myTP = r.myTotalPct;
-    const pctColor = myTP >= 100 ? 'var(--g)' : myTP >= 50 ? 'var(--b)' : 'var(--muted)';
-    const barColor = myTP >= 100 ? 'var(--g)' : myTP >= 50 ? 'var(--b)' : 'var(--border)';
-    grandMyTotal += r.myTotalVal;
-    grandQty += r.qty;
-    totalHtml += `<div class="total-col-item">
-      <div style="font-size:18px;font-weight:700;color:var(--text)">${esc(name)} <span style="font-size:18px;color:var(--muted)">${esc(color)}</span></div>
-      <div style="display:flex;align-items:baseline;gap:8px;margin-top:4px;flex-wrap:wrap">
-        <span style="font-size:22px;font-weight:700;color:#fbbf24">${r.myTotalVal}</span>
-        <span style="font-size:13px;color:var(--b)">/ <span style="font-size:18px;font-weight:700">${r.qty}</span>個</span>
-      </div>
-      <div class="total-pbar" style="margin-top:4px"><div class="total-pbar-fill" style="width:${Math.min(100,myTP)}%;background:${barColor}"></div></div>
-      <div style="font-size:13px;font-weight:700;color:${pctColor};margin-top:2px">${myTP}%</div>
-    </div>`;
+    // ── 中央カラム: 進捗入力リスト ──
+    if (!focusedInInput) {
+      inputHtml += `<div id="personal-input-group-${esc(g.name)}" style="${displayStyle}">`;
+      g.rows.forEach(r => {
+        const planId = r.plan.id;
+        const totalPct = r.qty > 0 ? Math.round(r.totalVal / r.qty * 100) : 0;
+        const myPct    = r.qty > 0 ? Math.round(r.myVal   / r.qty * 100) : 0;
+        inputHtml += `<div class="post-input-item">
+          <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+            <span style="font-size:18px;font-weight:700;color:var(--text)">${esc(r.name)}</span>
+            <span style="font-size:18px;color:var(--muted)">${esc(r.color)}</span>
+          </div>
+          <div class="post-adj-row">
+            <button class="post-adj-btn" onclick="adjustPost('${planId}',-1)">－</button>
+            <input class="post-num-input" type="number" id="post-inp-${planId}"
+              value="${r.myVal}" min="0"
+              onchange="setPost('${planId}',this.value)">
+            <button class="post-adj-btn" onclick="adjustPost('${planId}',1)">＋</button>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;flex-wrap:wrap;gap:4px">
+            <span style="font-size:13px;font-weight:700;color:#f87171">全端末: <span style="font-size:15px">${r.totalVal}</span>/<span style="color:var(--b)">${r.qty}個</span> ${totalPct}%</span>
+            <span style="font-size:13px;font-weight:700;color:#fbbf24;margin-left:auto">この端末: <span style="font-size:15px">${r.myVal}</span>個</span>
+          </div>
+        </div>`;
+      });
+      inputHtml += '</div>';
+    }
+
+    // ── 右カラム: 累計リスト ──
+    totalHtml += `<div id="personal-total-group-${esc(g.name)}" style="${displayStyle}">`;
+    g.rows.forEach(r => {
+      grandMyTotal += r.myTotalVal;
+      grandQty     += r.qty;
+      totalHtml += `<div class="total-col-item">
+        <div style="font-size:18px;font-weight:700;color:var(--text)">${esc(r.name)} <span style="font-size:18px;color:var(--muted)">${esc(r.color)}</span></div>
+        <div style="display:flex;align-items:baseline;gap:8px;margin-top:4px;flex-wrap:wrap">
+          <span style="font-size:22px;font-weight:700;color:#fbbf24">${r.myTotalVal}</span>
+          <span style="font-size:13px;color:var(--b)">/ <span style="font-size:18px;font-weight:700">${r.qty}</span>個</span>
+        </div>
+      </div>`;
+    });
+    totalHtml += '</div>';
   });
-  // 全体合計行（個人累計）
+
+  // 個人累計フッター
   const grandTotalPct = grandQty > 0 ? Math.round(grandMyTotal / grandQty * 100) : 0;
   const grandTotalPctColor = grandTotalPct >= 100 ? 'var(--g)' : grandTotalPct >= 50 ? 'var(--b)' : 'var(--muted)';
-  totalHtml += `<div style="padding:10px 10px;border-top:1px solid var(--g2);background:#052e16">
+  totalHtml += `<div style="padding:10px;border-top:1px solid var(--g2);background:#052e16">
     <div style="font-size:13px;color:var(--g);font-weight:700">個人累計</div>
     <div style="font-size:20px;font-weight:700;color:${grandTotalPctColor}">${grandMyTotal}<span style="font-size:13px;color:var(--muted)">/${grandQty}個</span></div>
-    <div style="font-size:13px;font-weight:700;color:${grandTotalPctColor}">${grandTotalPct}%</div>
   </div>`;
-  totalListEl.innerHTML = totalHtml;
+
+  planListEl.innerHTML  = planHtml  || '<div class="text-muted f12" style="padding:12px;text-align:center">計画なし</div>';
+  if (!focusedInInput) inputListEl.innerHTML = inputHtml || '<div class="text-muted f12" style="padding:8px">計画なし</div>';
+  totalListEl.innerHTML = totalHtml || '<div class="text-muted f12" style="padding:12px;text-align:center">計画なし</div>';
+}
+
+function togglePersonalGroup(groupName) {
+  _personalGroupOpen[groupName] = !_personalGroupOpen[groupName];
+  const ids = ['personal-plan-group-', 'personal-input-group-', 'personal-total-group-'];
+  ids.forEach(prefix => {
+    const el = document.getElementById(prefix + groupName);
+    if (el) el.style.display = _personalGroupOpen[groupName] ? '' : 'none';
+  });
+  // ヘッダーの▼▶を更新
+  renderPersonal();
 }
 
 function adjustPost(planId, delta) {
