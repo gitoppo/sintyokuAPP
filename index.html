@@ -716,11 +716,18 @@ function renderPreGroupHTML(g, _done, _cardStyle, _badge) {
 
   const priorityBadge = g.plans.some(p => p.priority) ? '<span class="priority-badge">優先</span>' : '';
 
+  // 後工程合計（全端末）
+  const postGrandTotal = postRows.reduce((s, row) => s + row.postTotal, 0);
+  const postPct = totalQty > 0 ? Math.round(postGrandTotal / totalQty * 100) : 0;
+  const postPctColor = postPct >= 100 ? 'var(--g)' : postPct >= 50 ? 'var(--b)' : 'var(--muted)';
+
   return `<div class="pre-group" style="${cardStyle}">
     <div class="pre-group-header">
       <div class="pre-group-name">${esc(g.name)}</div>
       ${priorityBadge}${badge}
-      <div class="pre-group-stats">合計予定: ${totalQty}個</div>
+      <div class="pre-group-stats">
+        予定: ${totalQty}個　／　<span style="color:${postPctColor}">後工程: ${postGrandTotal}個 ${postPct}%</span>
+      </div>
     </div>
     <div class="pre-input-row">
       <div class="pre-total-lbl">前工程 実績<br><span style="font-size:14px;color:var(--muted)">残: ${fmtH(remainPreH)}</span></div>
@@ -1468,14 +1475,6 @@ function renderPlanList() {
             <div style="flex:1;min-width:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
               <div style="font-size:18px;font-weight:700;flex:2;min-width:120px">${esc(colorLabel)}</div>
               <div style="display:flex;align-items:center;gap:14px;flex-shrink:0">
-                <div style="text-align:center">
-                  <div style="font-size:11px;color:var(--muted)">前工程</div>
-                  <div style="font-size:20px;font-weight:700;color:var(--b)">${preDone}</div>
-                </div>
-                <div style="text-align:center">
-                  <div style="font-size:11px;color:var(--muted)">後工程</div>
-                  <div style="font-size:20px;font-weight:700;color:var(--g)">${postTotal}</div>
-                </div>
                 <div style="text-align:center">
                   <div style="font-size:11px;color:var(--muted)">数量</div>
                   <div style="font-size:22px;font-weight:700;color:var(--t)">${qty}</div>
