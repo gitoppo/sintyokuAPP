@@ -129,9 +129,9 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 /* 個人進捗 3カラム */
 .personal-3col{display:flex;gap:6px;min-height:0}
 .personal-col{flex:1;min-width:0;overflow-y:auto;max-height:calc(100vh - 140px);background:var(--card);border:1px solid var(--border);border-radius:10px}
-.personal-col-plan{flex:0 0 24%}
-.personal-col-input{flex:0 0 52%}
-.personal-col-total{flex:0 0 24%}
+.personal-col-plan{flex:0 0 20%}
+.personal-col-input{flex:0 0 48%}
+.personal-col-total{flex:0 0 32%}
 .personal-col-header{font-size:12px;font-weight:700;color:var(--muted);padding:8px 10px 6px;border-bottom:1px solid var(--border);text-align:center;letter-spacing:.04em;position:sticky;top:0;background:var(--card);z-index:1}
 /* 計画カラム */
 .plan-col-item{padding:10px 10px 8px;border-bottom:1px solid #0d1520}
@@ -935,24 +935,34 @@ function renderPersonal() {
     const matchPlans = st.plans.filter(p => p.itemId === masterItem.id && toNum(p.qty) > 0); // 数量0は非表示
     matchPlans.forEach(plan => {
       const prog = st.progress[plan.id] || { preDone:0, postDone:{} };
-      const myVal = dn ? toNum((prog.postDone || {})[dn]) : 0;
+      // 今日分: 端末名_今日の日付キー（中央カラム・今日の入力）
+      const dayKey = dn ? dn + '_' + todayStr() : null;
+      const myVal = dayKey ? toNum((prog.postDone || {})[dayKey]) : 0;
+      // 累計: この端末の全日付分を合計（右カラム）
+      const myTotalVal = dn ? Object.entries(prog.postDone || {}).reduce((s, [k, v]) => {
+        return k === dn || k.startsWith(dn + '_') ? s + toNum(v) : s;
+      }, 0) : 0;
       const totalVal = Object.values(prog.postDone || {}).reduce((s,v) => s + toNum(v), 0);
       const qty = toNum(plan.qty);
       const totalPct = qty > 0 ? Math.round(totalVal / qty * 100) : 0;
       const myPct = qty > 0 ? Math.round(myVal / qty * 100) : 0;
+      const myTotalPct = qty > 0 ? Math.round(myTotalVal / qty * 100) : 0;
       // 表示名・表示カラーを優先
       const name  = dispN(masterItem);
       const color = dispC(masterItem);
-      rows.push({ plan, item: masterItem, myVal, totalVal, qty, totalPct, myPct, name, color });
+      rows.push({ plan, item: masterItem, myVal, myTotalVal, totalVal, qty, totalPct, myPct, myTotalPct, name, color });
     });
   });
   // マスターに存在しないplanも末尾に（念のため）・数量0は除外
   st.plans.filter(p => !st.itemMaster.find(it => it.id === p.itemId) && toNum(p.qty) > 0).forEach(plan => {
     const prog = st.progress[plan.id] || { preDone:0, postDone:{} };
-    const myVal = dn ? toNum((prog.postDone || {})[dn]) : 0;
+    const dayKey2 = dn ? dn + '_' + todayStr() : null;
+    const myVal = dayKey2 ? toNum((prog.postDone || {})[dayKey2]) : 0;
+    const myTotalVal = dn ? Object.entries(prog.postDone || {}).reduce((s,[k,v]) => k===dn||k.startsWith(dn+'_') ? s+toNum(v) : s, 0) : 0;
     const totalVal = Object.values(prog.postDone || {}).reduce((s,v) => s + toNum(v), 0);
     const qty = toNum(plan.qty);
-    rows.push({ plan, item: null, myVal, totalVal, qty, totalPct: qty > 0 ? Math.round(totalVal/qty*100) : 0, myPct: qty > 0 ? Math.round(myVal/qty*100) : 0, name: '不明', color: '' });
+    const myTotalPct = qty > 0 ? Math.round(myTotalVal/qty*100) : 0;
+    rows.push({ plan, item: null, myVal, myTotalVal, totalVal, qty, totalPct: qty > 0 ? Math.round(totalVal/qty*100) : 0, myPct: qty > 0 ? Math.round(myVal/qty*100) : 0, myTotalPct, name: '不明', color: '' });
   });
 
   if (!rows.length) {
@@ -1018,19 +1028,16 @@ function renderPersonal() {
         ? `<button class="unlock-btn" onclick="unlockPost('${planId}')">🔓 ロック解除（次週ストック）</button>`
         : '';
 
-      // 全端末合計の小表示
-      const totalBadge = !isAchieved
-        ? `<span style="font-size:12px;color:${totalPctColor};margin-left:auto">全端末: ${r.totalVal}/${r.qty}個 ${r.totalPct}%</span>`
-        : '';
+      // 全端末合計（inputHeader内で直接描画）
+      const totalBadge = '';
 
       const itemBgClass = isOver ? 'achieved-over' : (isAchieved ? 'achieved' : '');
       const borderColor = isLocked ? 'border:1px solid var(--g2)' : (isOver ? 'border:1px solid #854d0e' : '');
 
       inputHtml += `<div class="post-input-item ${itemBgClass}" style="${borderColor}">
         <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:6px;flex-wrap:wrap">
-          <span style="font-size:16px;font-weight:700;color:var(--text)">${esc(name)}</span>
-          <span style="font-size:14px;color:var(--muted)">${esc(color)}</span>
-          ${totalBadge}
+          <span style="font-size:18px;font-weight:700;color:var(--text)">${esc(name)}</span>
+          <span style="font-size:16px;color:var(--muted)">${esc(color)}</span>
         </div>
         ${bannerHtml}
         <div class="post-adj-row">
@@ -1042,39 +1049,45 @@ function renderPersonal() {
             onchange="setPost('${planId}',this.value)">
           <button class="post-adj-btn" onclick="adjustPost('${planId}',1)" ${isLocked ? 'disabled' : ''}>＋</button>
         </div>
-        <div style="font-size:12px;color:var(--muted);text-align:right;margin-top:4px">この端末: ${r.myVal}個　${r.myPct}%</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;flex-wrap:wrap;gap:4px">
+          ${!isAchieved ? `<span style="font-size:13px;font-weight:700;color:#f87171">全端末: <span style="font-size:15px">${r.totalVal}</span>/${r.qty}個 ${r.totalPct}%</span>` : ''}
+          <span style="font-size:13px;font-weight:700;color:#fbbf24;margin-left:auto">この端末: <span style="font-size:15px">${r.myVal}</span>個 ${r.myPct}%</span>
+        </div>
         ${unlockBtnHtml}
       </div>`;
     });
     inputListEl.innerHTML = inputHtml || '<div class="text-muted f12" style="padding:8px">計画なし</div>';
   }
 
-  // ── 右カラム: 今日までの合計（この端末のみ） ──────────────────
+  // ── 右カラム: 累計（この端末の全日付合計） ──────────────────
   let totalHtml = '';
   let grandMyTotal = 0, grandQty = 0;
   rows.forEach(r => {
     const name = r.name;
     const color = r.color;
-    // この端末の数量・達成率
-    const myPct = r.myPct;
-    const pctColor = myPct >= 100 ? 'var(--g)' : myPct >= 50 ? 'var(--b)' : 'var(--muted)';
-    const barColor = myPct >= 100 ? 'var(--g)' : myPct >= 50 ? 'var(--b)' : 'var(--border)';
-    grandMyTotal += r.myVal;
+    // この端末の累計（全日付分）・達成率
+    const myTP = r.myTotalPct;
+    const pctColor = myTP >= 100 ? 'var(--g)' : myTP >= 50 ? 'var(--b)' : 'var(--muted)';
+    const barColor = myTP >= 100 ? 'var(--g)' : myTP >= 50 ? 'var(--b)' : 'var(--border)';
+    grandMyTotal += r.myTotalVal;
     grandQty += r.qty;
     totalHtml += `<div class="total-col-item">
-      <div class="total-col-name">${esc(name)} <span style="color:var(--muted)">${esc(color)}</span></div>
-      <div class="total-col-val" style="color:${pctColor}">${r.myVal}<span style="font-size:13px;color:var(--muted)">/${r.qty}個</span></div>
-      <div class="total-pbar"><div class="total-pbar-fill" style="width:${Math.min(100,myPct)}%;background:${barColor}"></div></div>
-      <div class="total-col-pct" style="color:${pctColor}">${myPct}%</div>
+      <div style="font-size:15px;font-weight:700;color:var(--text)">${esc(name)} <span style="font-size:13px;color:var(--muted)">${esc(color)}</span></div>
+      <div style="display:flex;align-items:baseline;gap:8px;margin-top:4px;flex-wrap:wrap">
+        <span style="font-size:22px;font-weight:700;color:#fbbf24">${r.myTotalVal}</span>
+        <span style="font-size:13px;color:var(--b)">/ <span style="font-size:18px;font-weight:700">${r.qty}</span>個</span>
+      </div>
+      <div class="total-pbar" style="margin-top:4px"><div class="total-pbar-fill" style="width:${Math.min(100,myTP)}%;background:${barColor}"></div></div>
+      <div style="font-size:13px;font-weight:700;color:${pctColor};margin-top:2px">${myTP}%</div>
     </div>`;
   });
-  // 全体合計行（個人）
-  const myTotalPct = grandQty > 0 ? Math.round(grandMyTotal / grandQty * 100) : 0;
-  const myTotalPctColor = myTotalPct >= 100 ? 'var(--g)' : myTotalPct >= 50 ? 'var(--b)' : 'var(--muted)';
+  // 全体合計行（個人累計）
+  const grandTotalPct = grandQty > 0 ? Math.round(grandMyTotal / grandQty * 100) : 0;
+  const grandTotalPctColor = grandTotalPct >= 100 ? 'var(--g)' : grandTotalPct >= 50 ? 'var(--b)' : 'var(--muted)';
   totalHtml += `<div style="padding:10px 10px;border-top:1px solid var(--g2);background:#052e16">
-    <div style="font-size:13px;color:var(--g);font-weight:700">個人合計</div>
-    <div style="font-size:20px;font-weight:700;color:${myTotalPctColor}">${grandMyTotal}<span style="font-size:13px;color:var(--muted)">/${grandQty}個</span></div>
-    <div style="font-size:13px;font-weight:700;color:${myTotalPctColor}">${myTotalPct}%</div>
+    <div style="font-size:13px;color:var(--g);font-weight:700">個人累計</div>
+    <div style="font-size:20px;font-weight:700;color:${grandTotalPctColor}">${grandMyTotal}<span style="font-size:13px;color:var(--muted)">/${grandQty}個</span></div>
+    <div style="font-size:13px;font-weight:700;color:${grandTotalPctColor}">${grandTotalPct}%</div>
   </div>`;
   totalListEl.innerHTML = totalHtml;
 }
@@ -1092,8 +1105,10 @@ function setPost(planId, val) {
   if (!dn) { alert('端末名が未設定です。⚙️設定タブで設定してください。'); return; }
   if (!st.progress[planId]) st.progress[planId] = { preDone:0, postDone:{} };
   if (!st.progress[planId].postDone) st.progress[planId].postDone = {};
-  const prev = toNum(st.progress[planId].postDone[dn]);
-  st.progress[planId].postDone[dn] = Math.max(0, toNum(val));
+  // キーを「端末名_日付」形式にして日付ごとに管理
+  const dayKey = dn + '_' + todayStr();
+  const prev = toNum(st.progress[planId].postDone[dayKey]);
+  st.progress[planId].postDone[dayKey] = Math.max(0, toNum(val));
 
   // 操作ログ
   const plan = st.plans.find(p => p.id === planId);
@@ -1509,7 +1524,8 @@ function addPlan() {
   memo.value = '';
   pri.checked = false;
   saveLocal();
-  debouncedCloudSave();
+  // 計画登録は即時クラウド保存（debouncedだとポーリングと競合して消えることがある）
+  Cloud.savePlansProgress(null, null);
   renderAll();
 }
 
@@ -2248,14 +2264,24 @@ function applyCloudData(json, forceShiftAttend) {
   }
   if (json.progress && typeof json.progress === 'object') {
     const dn = st.deviceName;
-    // 自端末の現在の入力値を退避
-    const myLocalValues = {};
-    if (dn) {
-      Object.entries(st.progress).forEach(([k, v]) => {
-        const myVal = toNum((v.postDone||{})[dn]);
-        if (myVal > 0) myLocalValues[k] = myVal;
-      });
-    }
+    const today = todayStr();
+    // 自端末の現在の入力値を退避（postDone・preDone両方）
+    const myLocalPost = {};
+    const myLocalPre = {};
+    Object.entries(st.progress).forEach(([k, v]) => {
+      // postDone: 自端末の今日分キー（端末名_日付）を保護
+      if (dn) {
+        const dayKey = dn + '_' + today;
+        const myVal = toNum((v.postDone||{})[dayKey]);
+        if (myVal > 0) myLocalPost[k] = myVal;
+        // 旧キー（端末名のみ）も念のため保護
+        const myValOld = toNum((v.postDone||{})[dn]);
+        if (myValOld > 0 && !myLocalPost[k]) myLocalPost[k] = myValOld;
+      }
+      // preDone: ローカルの値を常に保護（前工程は1端末で管理）
+      const localPre = toNum(v.preDone);
+      if (localPre > 0) myLocalPre[k] = localPre;
+    });
     // クラウドデータをそのまま反映（他端末の最新データを正しく取得）
     st.progress = {};
     Object.entries(json.progress).forEach(([k,v]) => {
@@ -2264,13 +2290,21 @@ function applyCloudData(json, forceShiftAttend) {
         postDone: Object.assign({}, v.postDone || {})
       };
     });
-    // 自端末の値：クラウドより大きければローカルを優先（未送信の入力を保護）
+    // preDone: ローカル値がクラウドより大きければローカルを優先
+    Object.entries(myLocalPre).forEach(([k, localPre]) => {
+      if (!st.progress[k]) st.progress[k] = { preDone:0, postDone:{} };
+      if (localPre > toNum(st.progress[k].preDone)) {
+        st.progress[k].preDone = localPre;
+      }
+    });
+    // postDone: 自端末の今日分はローカルを優先（未送信の入力を保護）
     if (dn) {
-      Object.entries(myLocalValues).forEach(([k, localVal]) => {
+      const dayKey = dn + '_' + today;
+      Object.entries(myLocalPost).forEach(([k, localVal]) => {
         if (!st.progress[k]) st.progress[k] = { preDone:0, postDone:{} };
-        const cloudVal = toNum((st.progress[k].postDone||{})[dn]);
+        const cloudVal = toNum((st.progress[k].postDone||{})[dayKey]);
         if (localVal > cloudVal) {
-          st.progress[k].postDone[dn] = localVal;
+          st.progress[k].postDone[dayKey] = localVal;
         }
       });
     }
@@ -2303,6 +2337,7 @@ async function debouncedCloudSave() {
   clearTimeout(_cloudSaveTimer);
   _cloudSaveTimer = setTimeout(async () => {
     const dn = st.deviceName;
+    const today = todayStr();
     // 送信前にクラウドの最新progressを取得してマージ
     // （他端末が入力した値を上書きしないようにする）
     try {
@@ -2311,11 +2346,15 @@ async function debouncedCloudSave() {
         Object.entries(json.progress).forEach(([k, v]) => {
           if (!st.progress[k]) st.progress[k] = { preDone:0, postDone:{} };
           const cloudPostDone = v.postDone || {};
-          const localVal = dn ? toNum((st.progress[k].postDone||{})[dn]) : 0;
-          // 他端末のデータはクラウドから取得・自端末はローカル優先
+          // postDone: 自端末の今日分はローカル優先、他端末はクラウド優先
+          const dayKey = dn ? dn + '_' + today : null;
+          const localVal = dayKey ? toNum((st.progress[k].postDone||{})[dayKey]) : 0;
           st.progress[k].postDone = Object.assign({}, cloudPostDone);
-          if (dn) st.progress[k].postDone[dn] = localVal;
-          // preDoneはローカルを優先（前工程は1端末で管理）
+          if (dayKey) st.progress[k].postDone[dayKey] = localVal;
+          // preDone: ローカルを優先（前工程は1端末で管理・クラウドより大きければ保持）
+          const localPre = toNum(st.progress[k].preDone);
+          const cloudPre = toNum(v.preDone);
+          st.progress[k].preDone = localPre >= cloudPre ? localPre : cloudPre;
         });
       }
     } catch(e) { /* ネットワークエラー時はそのまま送信 */ }
