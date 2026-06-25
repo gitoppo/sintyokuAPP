@@ -669,6 +669,7 @@ function renderProgress() {
     const done = isGroupComplete(g);
     const cardStyle = done ? 'opacity:0.45;filter:grayscale(0.5)' : '';
     const badge = done ? '<span style="padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;background:#1e293b;color:#64748b;flex-shrink:0">✓完了</span>' : '';
+    if (_preGroupOpen[g.name] === undefined) _preGroupOpen[g.name] = true;
     return renderPreGroupHTML(g, done, cardStyle, badge);
   }).join('');
   if (complete.length > 0) {
@@ -737,38 +738,55 @@ function renderPreGroupHTML(g, _done, _cardStyle, _badge) {
   const postPct = totalQty > 0 ? Math.round(postGrandTotal / totalQty * 100) : 0;
   const postPctColor = postPct >= 100 ? 'var(--g)' : postPct >= 50 ? 'var(--b)' : 'var(--muted)';
 
+  // 納品日（グループ内で最も早い日）を月/日で表示
+  const dates = g.plans.map(p => p.date).filter(Boolean).sort();
+  const dateLabel = dates.length > 0 ? (() => {
+    const d = new Date(dates[0]);
+    return `${d.getMonth()+1}/${d.getDate()}`;
+  })() : '';
+
+  const isOpen = _preGroupOpen[g.name] !== false;
+  const chevron = isOpen ? '▼' : '▶';
+  const bodyStyle = isOpen ? '' : 'display:none';
+  const groupKey = esc(g.name.replace(/\s/g,'_'));
+
   return `<div class="pre-group" style="${cardStyle}">
-    <div class="pre-group-header">
+    <div class="pre-group-header" onclick="togglePreGroup('${esc(g.name)}')" style="cursor:pointer;user-select:none">
+      <span style="font-size:13px;color:var(--muted);flex-shrink:0">${chevron}</span>
       <div class="pre-group-name">${esc(g.name)}</div>
       ${priorityBadge}${badge}
+      ${dateLabel ? `<span style="font-size:16px;color:var(--muted);flex-shrink:0">${dateLabel}</span>` : ''}
       <div class="pre-group-stats">
         予定: ${totalQty}個　／　<span style="color:${postPctColor}">後工程: ${postGrandTotal}個 ${postPct}%</span>
       </div>
     </div>
-    <div class="pre-input-row">
-      <div class="pre-total-lbl">前工程 実績<br><span style="font-size:14px;color:var(--muted)">残: ${fmtH(remainPreH)}</span></div>
-      <button class="adj-btn" onclick="adjustPreGroup('${esc(g.name)}',-1)">－</button>
-      <input class="num-input" type="number" id="pre-input-${esc(g.name.replace(/\s/g,'_'))}"
-        value="${preDoneTotal}" min="0"
-        onchange="setPreGroup('${esc(g.name)}',this.value)">
-      <button class="adj-btn" onclick="adjustPreGroup('${esc(g.name)}',1)">＋</button>
-    </div>
-    <div class="post-list">
-      <div style="font-size:13px;color:var(--muted);margin-bottom:8px">後工程（全端末合計・読み取り専用）</div>
-      ${postRows.map(row => {
-        const pctColor = row.pct >= 100 ? 'var(--g)' : row.pct >= 50 ? 'var(--b)' : 'var(--muted)';
-        const pctLabel = row.qty === 0 ? '－' : `${row.pct}%`;
-        const barWidth = row.qty === 0 ? 0 : row.pct;
-        const colorLabel = dispC(row.item) || '?';
-        return `<div class="post-row">
-          <div class="post-label">${esc(colorLabel)}${row.qty === 0 ? ' <span class="f12 text-muted">（数量未定）</span>' : ''}</div>
-          <div class="pbar-wrap"><div class="pbar-fill" style="width:${barWidth}%;background:${pctColor}"></div></div>
-          <div class="post-val" style="color:${pctColor}">${row.postTotal}</div>
-          <div class="f12 text-muted" style="min-width:40px;text-align:right">${pctLabel}</div>
-        </div>`;
-      }).join('')}
+    <div id="pre-body-${groupKey}" style="${bodyStyle}">
+      <div class="pre-input-row">
+        <div class="pre-total-lbl">前工程 実績<br><span style="font-size:14px;color:var(--muted)">残: ${fmtH(remainPreH)}</span></div>
+        <button class="adj-btn" onclick="adjustPreGroup('${esc(g.name)}',-1)">－</button>
+        <input class="num-input" type="number" id="pre-input-${groupKey}"
+          value="${preDoneTotal}" min="0"
+          onchange="setPreGroup('${esc(g.name)}',this.value)">
+        <button class="adj-btn" onclick="adjustPreGroup('${esc(g.name)}',1)">＋</button>
+      </div>
+      <div class="post-list">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:8px">後工程（全端末合計・読み取り専用）</div>
+        ${postRows.map(row => {
+          const pctColor = row.pct >= 100 ? 'var(--g)' : row.pct >= 50 ? 'var(--b)' : 'var(--muted)';
+          const colorLabel = dispC(row.item) || '?';
+          return `<div class="post-row">
+            <div class="post-label">${esc(colorLabel)}${row.qty === 0 ? ' <span class="f12 text-muted">（数量未定）</span>' : ''}</div>
+            <div class="post-val" style="color:${pctColor}">${row.postTotal}</div>
+          </div>`;
+        }).join('')}
+      </div>
     </div>
   </div>`;
+}
+
+function togglePreGroup(groupName) {
+  _preGroupOpen[groupName] = !(_preGroupOpen[groupName] !== false);
+  renderProgress();
 }
 
 // 前工程: 品目名グループ単位で调整
@@ -1064,7 +1082,7 @@ function renderPersonal() {
         <div class="plan-col-name">${esc(r.name)}${priBadge}${doneBadge}</div>
         <div class="plan-col-color">${esc(r.color)}</div>
         <div class="plan-col-qty">${r.qty}個</div>
-        <div class="plan-col-date">${fmtDate(r.plan.date)}${r.plan.memo ? '　'+esc(r.plan.memo) : ''}</div>
+
       </div>`;
     });
     planHtml += '</div>';
@@ -1396,6 +1414,7 @@ function downloadPlanCsvTemplate() {
 
 // 計画タブ: アコーディオン開閉状態（品目名 → true=開, false=閉）
 const _planGroupOpen = {};
+const _preGroupOpen = {};
 
 function renderPlanList() {
   const el = document.getElementById('plan-list');
